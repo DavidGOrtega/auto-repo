@@ -1,0 +1,41 @@
+name: opencode
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  opencode:
+    if: |
+      contains(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: github-copilot/gpt-5.4
+          use_github_token: true
