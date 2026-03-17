@@ -1,3 +1,16 @@
+## Apply to an Existing Repository
+
+Copy the bootstrap files from this repository into the target repository before running the setup commands:
+
+- `AGENTS.md`
+- `.gitignore`
+- `.github/workflows/opencode.yml`
+- `.github/workflows/opencode-scheduled.yml`
+- `.github/workflows/issues-triage.yml`
+- `SETUP_REPO.md`
+
+If the target repository already has any of these files, merge the relevant changes instead of overwriting them blindly.
+
 ## Setup Secrets
 
 - Add a repository secret named `OPENCODE_AUTH_JSON`.
@@ -11,6 +24,14 @@
 gh secret set OPENCODE_AUTH_JSON < ~/.local/share/opencode/auth.json
 ```
 
+## Repository Files
+
+- `AGENTS.md` defines the working agreement OpenCode should follow inside the repository.
+- `.github/workflows/opencode.yml` handles interactive `/oc` and `/opencode` requests.
+- `.github/workflows/opencode-scheduled.yml` runs a scheduled review every 12 hours.
+- `.github/workflows/issues-triage.yml` labels new issues with `triage`.
+- `.gitignore` ignores the local `.worktrees` directory used by the branching workflow.
+
 ## Labels
 
 - Create the labels `triage` and `bug`.
@@ -20,6 +41,11 @@ gh secret set OPENCODE_AUTH_JSON < ~/.local/share/opencode/auth.json
 gh label create triage --color FBCA04 --description "Needs initial triage"
 gh label create bug --color D73A4A --description "Something isn't working"
 ```
+
+## Optional Repository Settings
+
+- If the target repository already has its own label taxonomy, keep the existing labels and only add the missing ones required by the workflows.
+- If the target repository does not want scheduled reviews, omit `.github/workflows/opencode-scheduled.yml`.
 
 ## Repository Merge Settings
 
@@ -35,3 +61,11 @@ gh api --method PATCH "repos/$(gh repo view --json nameWithOwner -q .nameWithOwn
   -f allow_squash_merge=true \
   -f delete_branch_on_merge=true
 ```
+
+## Verification
+
+- Confirm GitHub Actions is enabled in the target repository.
+- Confirm the `OPENCODE_AUTH_JSON` secret exists.
+- Confirm the `triage` and `bug` labels exist.
+- Open a test issue and add a comment containing `/oc` or `/opencode`.
+- Verify the `opencode` workflow starts and posts back to the thread.
