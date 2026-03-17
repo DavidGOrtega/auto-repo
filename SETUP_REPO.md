@@ -3,9 +3,22 @@
 - Add a repository secret named `OPENCODE_AUTH_JSON`.
 - Set its value to the full contents of `~/.local/share/opencode/auth.json` from the machine where OpenCode is already authenticated.
 - This lets the GitHub Actions runner restore OpenCode provider credentials before running the workflow.
+- The workflow also configures a local git author in the runner so commits can be created when using `GITHUB_TOKEN` without the OpenCode GitHub app.
+- The workflow requires `/oc` or `/opencode` in regular issue comments, but pull request comments, pull request review comments, and pull request reviews from `OWNER`, `MEMBER`, or `COLLABORATOR` users trigger OpenCode implicitly.
+- `.github/workflows/opencode-scheduled.yml` reviews the repository every 12 hours and can open tracking issues for bugs or follow-up work.
 
 ```bash
 gh secret set OPENCODE_AUTH_JSON < ~/.local/share/opencode/auth.json
+```
+
+## Labels
+
+- Create the labels `triage` and `bug`.
+- New issues are automatically labeled with `triage` by `.github/workflows/issues-triage.yml`.
+
+```bash
+gh label create triage --color FBCA04 --description "Needs initial triage"
+gh label create bug --color D73A4A --description "Something isn't working"
 ```
 
 ## Repository Merge Settings
