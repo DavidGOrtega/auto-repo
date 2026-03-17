@@ -6,7 +6,25 @@ Install OpenCode automation into the repo you are currently in with one command,
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash
 ```
 
-This repository is the bootstrap source for that command. It adds the OpenCode workflow files, updates `.gitignore` safely, creates the required labels and secret, and enables the GitHub Actions settings needed for commits and pull requests.
+This repository is the bootstrap source for that command.
+
+`oc-init` is not just a file copier. It resolves the target repository root, installs the OpenCode bootstrap files, preserves existing files by default, and configures the GitHub repository settings the workflows need.
+
+## What `oc-init` does
+
+When you run `oc-init`, it:
+
+- resolves the target repo to the git root, even if you launch it from a nested folder
+- copies `AGENTS.md`, `.github/workflows/opencode.yml`, and `.github/workflows/issues-triage.yml`
+- optionally copies `.github/workflows/opencode-scheduled.yml` when you pass `--with-scheduled`
+- updates `.gitignore` by appending `.worktrees` only when that entry is missing
+- writes `*.oc-init-new` files instead of overwriting existing managed files, unless you pass `--force`
+- creates or updates the `triage` and `bug` labels through `gh`
+- uploads the `OPENCODE_AUTH_JSON` secret from `~/.local/share/opencode/auth.json`
+- enables GitHub Actions workflow write permissions and pull request approval permissions
+- configures repository merge settings for squash-merge flow and branch cleanup
+
+By default, existing repository content stays in place. `--force` only replaces the files managed by `oc-init`; it does not touch unrelated files.
 
 ## What it includes
 
