@@ -6,9 +6,11 @@ DEFAULT_SOURCE_BASE_URL='https://raw.githubusercontent.com/DavidGOrtega/auto-rep
 
 usage() {
   cat <<'EOF'
-Usage: ./oc-init TARGET_REPO [--with-scheduled] [--force] [--source-base-url URL]
+Usage: ./oc-init [TARGET_REPO] [--with-scheduled] [--force] [--source-base-url URL]
 
 Copy the OpenCode bootstrap files into an existing repository.
+
+When TARGET_REPO is omitted, oc-init uses the current git repository.
 
 Options:
   --with-scheduled  Include the scheduled review workflow.
@@ -66,10 +68,9 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-[ -n "$TARGET_REPO" ] || {
-  usage >&2
-  exit 1
-}
+[ -n "$TARGET_REPO" ] || TARGET_REPO=$(git rev-parse --show-toplevel 2>/dev/null || true)
+
+[ -n "$TARGET_REPO" ] || fail 'pass TARGET_REPO or run oc-init from inside a git repository'
 
 [ -n "$SOURCE_BASE_URL" ] || fail 'source base URL must not be empty'
 [ -d "$TARGET_REPO" ] || fail "target repository does not exist: $TARGET_REPO"

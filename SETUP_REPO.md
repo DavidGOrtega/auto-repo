@@ -1,14 +1,26 @@
 ## Apply to an Existing Repository
 
-Start with the remote bootstrap command so you can install this into an existing repository without cloning this one first:
+Start from inside the target repository with the remote bootstrap command so you can install this without cloning this repository first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash
+```
+
+After that, the rest of this document is the manual repository setup checklist.
+
+If you are outside the target repo, pass the target path explicitly:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- /path/to/target-repo
 ```
 
-After that, the rest of this document is the manual repository setup checklist.
-
 If you already have this repository cloned locally, you can run:
+
+```bash
+./oc-init
+```
+
+Or point it at a different repository:
 
 ```bash
 ./oc-init /path/to/target-repo
@@ -22,7 +34,7 @@ By default the script copies these files into the target repository:
 - `.github/workflows/issues-triage.yml`
 - `SETUP_REPO.md`
 
-If you also want scheduled repository reviews, run `./oc-init /path/to/target-repo --with-scheduled` or add `--with-scheduled` to the remote command to include `.github/workflows/opencode-scheduled.yml`.
+If you also want scheduled repository reviews, run `./oc-init --with-scheduled` from inside the target repo, `./oc-init /path/to/target-repo --with-scheduled` from elsewhere, or add `--with-scheduled` to the remote command to include `.github/workflows/opencode-scheduled.yml`.
 
 If the target repository already has any of these files, the script keeps the current file in place and writes a `*.oc-init-new` copy beside it. Merge the relevant changes instead of overwriting them blindly.
 
