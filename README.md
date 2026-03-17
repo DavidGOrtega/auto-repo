@@ -29,6 +29,12 @@ Include the scheduled review workflow only when you want it:
 ./oc-init ../target-repo --with-scheduled
 ```
 
+Replace existing managed files instead of emitting `*.oc-init-new` merge copies:
+
+```bash
+./oc-init ../target-repo --force
+```
+
 Run it remotely without cloning this repository first:
 
 ```bash
@@ -41,14 +47,14 @@ Remote installs can also include the scheduled workflow:
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo --with-scheduled
 ```
 
-If a target file already exists, `oc-init` preserves it and writes a `*.oc-init-new` file beside it so you can merge intentionally.
+If a target file already exists, `oc-init` preserves it and writes a `*.oc-init-new` file beside it so you can merge intentionally. Pass `--force` when you want the bootstrap-managed files to be replaced directly.
 
 If you want to install from a fork or a non-default ref, pass `--source-base-url https://raw.githubusercontent.com/<owner>/<repo>/<ref>`.
 
 ## Use this bootstrap in an existing repository
 
 1. Run `./oc-init /path/to/target-repo` from this repository, or use the remote `curl ... | bash` form.
-2. Review any generated `*.oc-init-new` files and merge them with the target repository's existing files.
+2. Review any generated `*.oc-init-new` files and merge them with the target repository's existing files, or use `--force` when you explicitly want bootstrap-managed files replaced.
 3. Review `AGENTS.md` and adjust branch naming or review conventions if your team uses different defaults.
 4. Complete the repository configuration in `SETUP_REPO.md`.
 5. Commit the copied files in the target repository.
@@ -59,3 +65,4 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 - The workflows use repository-scoped defaults and do not depend on a hardcoded repository name.
 - Git author configuration is handled inside the workflows so automation can create commits when needed.
 - The scheduled workflow is optional; add it with `./oc-init --with-scheduled` if you want automated periodic repository reviews.
+- `--force` only affects files managed by `oc-init`; it does not touch unrelated repository content.

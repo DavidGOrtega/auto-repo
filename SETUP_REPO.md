@@ -20,6 +20,8 @@ If you also want scheduled repository reviews, run `./oc-init /path/to/target-re
 
 If the target repository already has any of these files, the script keeps the current file in place and writes a `*.oc-init-new` copy beside it. Merge the relevant changes instead of overwriting them blindly.
 
+If you want to replace the bootstrap-managed files directly, add `--force`.
+
 If you need to install from a fork or branch instead of the default remote source, add `--source-base-url https://raw.githubusercontent.com/<owner>/<repo>/<ref>`.
 
 ## Setup Secrets
@@ -28,7 +30,8 @@ If you need to install from a fork or branch instead of the default remote sourc
 - Set its value to the full contents of `~/.local/share/opencode/auth.json` from the machine where OpenCode is already authenticated.
 - This lets the GitHub Actions runner restore OpenCode provider credentials before running the workflow.
 - The workflow also configures a local git author in the runner so commits can be created when using `GITHUB_TOKEN` without the OpenCode GitHub app.
-- The workflow requires `/oc` or `/opencode` in regular issue comments, but pull request comments, pull request review comments, and pull request reviews from `OWNER`, `MEMBER`, or `COLLABORATOR` users trigger OpenCode implicitly.
+- GitHub Actions repository settings must allow `Read and write permissions` for `GITHUB_TOKEN` and enable `Allow GitHub Actions to create and approve pull requests`.
+- The workflow requires `/oc` or `/opencode` in issue comments, pull request comments, pull request review comments, and pull request reviews, and only accepts them from `OWNER`, `MEMBER`, or `COLLABORATOR` users.
 - `.github/workflows/opencode-scheduled.yml` reviews the repository every 12 hours and can open tracking issues for bugs or follow-up work.
 
 ```bash
@@ -59,6 +62,19 @@ gh label create bug --color D73A4A --description "Something isn't working"
 - If the target repository already has its own label taxonomy, keep the existing labels and only add the missing ones required by the workflows.
 - If the target repository does not want scheduled reviews, omit `.github/workflows/opencode-scheduled.yml`.
 
+## GitHub Actions Permissions
+
+- Set the default `GITHUB_TOKEN` permission level to `Read and write`.
+- Allow GitHub Actions to create and approve pull requests.
+
+```bash
+gh api \
+  --method PUT \
+  "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/actions/permissions/workflow" \
+  -f default_workflow_permissions=write \
+  -F can_approve_pull_request_reviews=true
+```
+
 ## Repository Merge Settings
 
 - Allow only `squash merge`.
@@ -76,7 +92,7 @@ gh api --method PATCH "repos/$(gh repo view --json nameWithOwner -q .nameWithOwn
 
 ## Verification
 
-- Confirm `./oc-init` copied the expected files and that any `*.oc-init-new` files were merged intentionally.
+- Confirm `./oc-init` copied or replaced the expected files and that any `*.oc-init-new` files were merged intentionally when `--force` was not used.
 - Confirm GitHub Actions is enabled in the target repository.
 - Confirm the `OPENCODE_AUTH_JSON` secret exists.
 - Confirm the `triage` and `bug` labels exist.

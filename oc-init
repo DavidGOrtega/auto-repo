@@ -6,12 +6,13 @@ DEFAULT_SOURCE_BASE_URL='https://raw.githubusercontent.com/DavidGOrtega/auto-rep
 
 usage() {
   cat <<'EOF'
-Usage: ./oc-init TARGET_REPO [--with-scheduled] [--source-base-url URL]
+Usage: ./oc-init TARGET_REPO [--with-scheduled] [--force] [--source-base-url URL]
 
 Copy the OpenCode bootstrap files into an existing repository.
 
 Options:
   --with-scheduled  Include the scheduled review workflow.
+  --force           Overwrite managed target files instead of writing *.oc-init-new merge copies.
   --source-base-url Download bootstrap files from this base URL when they are not available locally.
   -h, --help        Show this help text.
 EOF
@@ -25,6 +26,7 @@ fail() {
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 TARGET_REPO=''
 INCLUDE_SCHEDULED='false'
+FORCE='false'
 SOURCE_BASE_URL=${OC_INIT_SOURCE_BASE_URL:-$DEFAULT_SOURCE_BASE_URL}
 TEMP_DIR=$(mktemp -d)
 
@@ -38,6 +40,9 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --with-scheduled)
       INCLUDE_SCHEDULED='true'
+      ;;
+    --force)
+      FORCE='true'
       ;;
     --source-base-url)
       shift
@@ -90,6 +95,7 @@ copy_file() {
   local target_path=$2
   local target_dir
   local source_path
+  local existed_before='false'
 
   source_path=$(resolve_source_path "$relative_path")
 
@@ -97,12 +103,22 @@ copy_file() {
   mkdir -p -- "$target_dir"
 
   if [ -e "$target_path" ]; then
+    existed_before='true'
+  fi
+
+  if [ "$existed_before" = 'true' ] && [ "$FORCE" != 'true' ]; then
     cp -- "$source_path" "$target_path.oc-init-new"
     printf 'merge required: %s already exists, wrote %s.oc-init-new\n' "$target_path" "$target_path"
     return
   fi
 
   cp -- "$source_path" "$target_path"
+
+  if [ "$FORCE" = 'true' ] && [ "$existed_before" = 'true' ]; then
+    printf 'replaced: %s\n' "$target_path"
+    return
+  fi
+
   printf 'copied: %s\n' "$target_path"
 }
 
@@ -117,6 +133,12 @@ if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
 fi
 
 printf '\nNext steps:\n'
-printf '1. Review any *.oc-init-new files and merge them into your existing files.\n'
-printf '2. Follow SETUP_REPO.md inside the target repository.\n'
-printf '3. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
+if [ "$FORCE" = 'true' ]; then
+  printf '1. Review the replaced files in git diff before committing.\n'
+  printf '2. Follow SETUP_REPO.md inside the target repository.\n'
+  printf '3. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
+else
+  printf '1. Review any *.oc-init-new files and merge them into your existing files.\n'
+  printf '2. Follow SETUP_REPO.md inside the target repository.\n'
+  printf '3. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
+fi
