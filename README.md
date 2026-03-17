@@ -1,10 +1,12 @@
 # OpenCode Repository Bootstrap
 
-This repository is a reusable bootstrap for adding OpenCode automation and GitHub workflow conventions to a repository that already exists.
+Install OpenCode automation into an existing repository with one command, without cloning this repository first.
 
-Use `./oc-init` to copy the bootstrap into another git repository instead of manually collecting files.
+```bash
+curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo
+```
 
-The same script also works as a remote installer, so you can pipe it straight into `bash` without cloning this repository first.
+This repository is the bootstrap source for that command. It adds OpenCode workflow conventions to a repository that already exists.
 
 ## What it includes
 
@@ -17,34 +19,40 @@ The same script also works as a remote installer, so you can pipe it straight in
 
 ## Quick start
 
-Run the bootstrap script from this repository and point it at an existing git repository:
-
-```bash
-./oc-init ../target-repo
-```
-
-Include the scheduled review workflow only when you want it:
-
-```bash
-./oc-init ../target-repo --with-scheduled
-```
-
-Replace existing managed files instead of emitting `*.oc-init-new` merge copies:
-
-```bash
-./oc-init ../target-repo --force
-```
-
-Run it remotely without cloning this repository first:
+Remote install is the default path:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo
 ```
 
-Remote installs can also include the scheduled workflow:
+Include the scheduled review workflow when you want it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo --with-scheduled
+```
+
+Replace existing managed files instead of emitting `*.oc-init-new` merge copies:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo --force
+```
+
+If you prefer to run it from a local clone, point `./oc-init` at an existing git repository:
+
+```bash
+./oc-init ../target-repo
+```
+
+Local clone with the optional scheduled workflow:
+
+```bash
+./oc-init ../target-repo --with-scheduled
+```
+
+Local clone with direct replacement of managed files:
+
+```bash
+./oc-init ../target-repo --force
 ```
 
 If a target file already exists, `oc-init` preserves it and writes a `*.oc-init-new` file beside it so you can merge intentionally. Pass `--force` when you want the bootstrap-managed files to be replaced directly.
@@ -53,7 +61,7 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 
 ## Use this bootstrap in an existing repository
 
-1. Run `./oc-init /path/to/target-repo` from this repository, or use the remote `curl ... | bash` form.
+1. Run the remote `curl ... | bash` command against `/path/to/target-repo`, or use `./oc-init` from a local clone if you already have this repository checked out.
 2. Review any generated `*.oc-init-new` files and merge them with the target repository's existing files, or use `--force` when you explicitly want bootstrap-managed files replaced.
 3. Review `AGENTS.md` and adjust branch naming or review conventions if your team uses different defaults.
 4. Complete the repository configuration in `SETUP_REPO.md`.

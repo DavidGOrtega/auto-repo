@@ -1,11 +1,17 @@
 ## Apply to an Existing Repository
 
-Run `./oc-init /path/to/target-repo` from this repository before running the setup commands.
-
-If you want to bootstrap a repository remotely without cloning this one first, use:
+Start with the remote bootstrap command so you can install this into an existing repository without cloning this one first:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- /path/to/target-repo
+```
+
+After that, the rest of this document is the manual repository setup checklist.
+
+If you already have this repository cloned locally, you can run:
+
+```bash
+./oc-init /path/to/target-repo
 ```
 
 By default the script copies these files into the target repository:
