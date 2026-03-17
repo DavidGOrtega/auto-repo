@@ -2,6 +2,12 @@
 
 Run `./oc-init /path/to/target-repo` from this repository before running the setup commands.
 
+If you want to bootstrap a repository remotely without cloning this one first, use:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- /path/to/target-repo
+```
+
 By default the script copies these files into the target repository:
 
 - `AGENTS.md`
@@ -10,9 +16,11 @@ By default the script copies these files into the target repository:
 - `.github/workflows/issues-triage.yml`
 - `SETUP_REPO.md`
 
-If you also want scheduled repository reviews, run `./oc-init /path/to/target-repo --with-scheduled` to include `.github/workflows/opencode-scheduled.yml`.
+If you also want scheduled repository reviews, run `./oc-init /path/to/target-repo --with-scheduled` or add `--with-scheduled` to the remote command to include `.github/workflows/opencode-scheduled.yml`.
 
 If the target repository already has any of these files, the script keeps the current file in place and writes a `*.oc-init-new` copy beside it. Merge the relevant changes instead of overwriting them blindly.
+
+If you need to install from a fork or branch instead of the default remote source, add `--source-base-url https://raw.githubusercontent.com/<owner>/<repo>/<ref>`.
 
 ## Setup Secrets
 

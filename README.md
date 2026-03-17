@@ -4,6 +4,8 @@ This repository is a reusable bootstrap for adding OpenCode automation and GitHu
 
 Use `./oc-init` to copy the bootstrap into another git repository instead of manually collecting files.
 
+The same script also works as a remote installer, so you can pipe it straight into `bash` without cloning this repository first.
+
 ## What it includes
 
 - `AGENTS.md` with repository workflow and contribution guidance for OpenCode sessions.
@@ -27,11 +29,25 @@ Include the scheduled review workflow only when you want it:
 ./oc-init ../target-repo --with-scheduled
 ```
 
+Run it remotely without cloning this repository first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo
+```
+
+Remote installs can also include the scheduled workflow:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo --with-scheduled
+```
+
 If a target file already exists, `oc-init` preserves it and writes a `*.oc-init-new` file beside it so you can merge intentionally.
+
+If you want to install from a fork or a non-default ref, pass `--source-base-url https://raw.githubusercontent.com/<owner>/<repo>/<ref>`.
 
 ## Use this bootstrap in an existing repository
 
-1. Run `./oc-init /path/to/target-repo` from this repository.
+1. Run `./oc-init /path/to/target-repo` from this repository, or use the remote `curl ... | bash` form.
 2. Review any generated `*.oc-init-new` files and merge them with the target repository's existing files.
 3. Review `AGENTS.md` and adjust branch naming or review conventions if your team uses different defaults.
 4. Complete the repository configuration in `SETUP_REPO.md`.

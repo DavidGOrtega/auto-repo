@@ -2,14 +2,17 @@
 
 set -euo pipefail
 
+DEFAULT_SOURCE_BASE_URL='https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master'
+
 usage() {
   cat <<'EOF'
-Usage: ./oc-init TARGET_REPO [--with-scheduled]
+Usage: ./oc-init TARGET_REPO [--with-scheduled] [--source-base-url URL]
 
 Copy the OpenCode bootstrap files into an existing repository.
 
 Options:
   --with-scheduled  Include the scheduled review workflow.
+  --source-base-url Download bootstrap files from this base URL when they are not available locally.
   -h, --help        Show this help text.
 EOF
 }
@@ -22,11 +25,24 @@ fail() {
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 TARGET_REPO=''
 INCLUDE_SCHEDULED='false'
+SOURCE_BASE_URL=${OC_INIT_SOURCE_BASE_URL:-$DEFAULT_SOURCE_BASE_URL}
+TEMP_DIR=$(mktemp -d)
+
+cleanup() {
+  rm -rf -- "$TEMP_DIR"
+}
+
+trap cleanup EXIT
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --with-scheduled)
       INCLUDE_SCHEDULED='true'
+      ;;
+    --source-base-url)
+      shift
+      [ "$#" -gt 0 ] || fail 'missing value for --source-base-url'
+      SOURCE_BASE_URL=$1
       ;;
     -h|--help)
       usage
@@ -50,13 +66,32 @@ done
   exit 1
 }
 
+[ -n "$SOURCE_BASE_URL" ] || fail 'source base URL must not be empty'
 [ -d "$TARGET_REPO" ] || fail "target repository does not exist: $TARGET_REPO"
 git -C "$TARGET_REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "target repository is not a git repository: $TARGET_REPO"
 
+resolve_source_path() {
+  local relative_path=$1
+  local local_path="$SCRIPT_DIR/$relative_path"
+  local fetched_path="$TEMP_DIR/${relative_path//\//__}"
+
+  if [ -f "$local_path" ]; then
+    printf '%s\n' "$local_path"
+    return
+  fi
+
+  command -v curl >/dev/null 2>&1 || fail 'curl is required when bootstrap files are not available locally'
+  curl -fsSL "${SOURCE_BASE_URL%/}/$relative_path" -o "$fetched_path" || fail "failed to download: ${SOURCE_BASE_URL%/}/$relative_path"
+  printf '%s\n' "$fetched_path"
+}
+
 copy_file() {
-  local source_path=$1
+  local relative_path=$1
   local target_path=$2
   local target_dir
+  local source_path
+
+  source_path=$(resolve_source_path "$relative_path")
 
   target_dir=$(dirname -- "$target_path")
   mkdir -p -- "$target_dir"
@@ -71,14 +106,14 @@ copy_file() {
   printf 'copied: %s\n' "$target_path"
 }
 
-copy_file "$SCRIPT_DIR/AGENTS.md" "$TARGET_REPO/AGENTS.md"
-copy_file "$SCRIPT_DIR/.gitignore" "$TARGET_REPO/.gitignore"
-copy_file "$SCRIPT_DIR/.github/workflows/opencode.yml" "$TARGET_REPO/.github/workflows/opencode.yml"
-copy_file "$SCRIPT_DIR/.github/workflows/issues-triage.yml" "$TARGET_REPO/.github/workflows/issues-triage.yml"
-copy_file "$SCRIPT_DIR/SETUP_REPO.md" "$TARGET_REPO/SETUP_REPO.md"
+copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
+copy_file '.gitignore' "$TARGET_REPO/.gitignore"
+copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
+copy_file '.github/workflows/issues-triage.yml' "$TARGET_REPO/.github/workflows/issues-triage.yml"
+copy_file 'SETUP_REPO.md' "$TARGET_REPO/SETUP_REPO.md"
 
 if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
-  copy_file "$SCRIPT_DIR/.github/workflows/opencode-scheduled.yml" "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
+  copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
 fi
 
 printf '\nNext steps:\n'
