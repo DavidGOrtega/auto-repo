@@ -6,7 +6,7 @@ Install OpenCode automation into the repo you are currently in with one command,
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash
 ```
 
-This repository is the bootstrap source for that command. It adds OpenCode workflow conventions to a repository that already exists.
+This repository is the bootstrap source for that command. It adds the OpenCode workflow files, updates `.gitignore` safely, creates the required labels and secret, and enables the GitHub Actions settings needed for commits and pull requests.
 
 ## What it includes
 
@@ -14,8 +14,8 @@ This repository is the bootstrap source for that command. It adds OpenCode workf
 - `.github/workflows/opencode.yml` to run OpenCode from issue comments and PR review activity.
 - `.github/workflows/opencode-scheduled.yml` to perform scheduled repository reviews.
 - `.github/workflows/issues-triage.yml` to label newly opened issues with `triage`.
-- `.gitignore` with the local `.worktrees` convention used by the branching guide.
-- `SETUP_REPO.md` with the repository configuration steps needed after copying these files.
+- `.gitignore` updated to include the local `.worktrees` convention used by the branching guide.
+- GitHub labels, secret, workflow permissions, PR approval permissions, and merge settings configured through `gh`.
 
 ## Quick start
 
@@ -24,6 +24,12 @@ Remote install from inside your target repo is the default path:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash
 ```
+
+That command assumes:
+
+- you run it inside the target git repository, even from a nested folder
+- `gh` is already authenticated for that repository
+- `~/.local/share/opencode/auth.json` exists on your machine
 
 Include the scheduled review workflow when you want it:
 
@@ -43,7 +49,7 @@ If you are outside the target repo, pass a path explicitly:
 curl -fsSL https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master/oc-init | bash -s -- ../target-repo
 ```
 
-If you prefer to run it from a local clone, `./oc-init` also defaults to the current repo:
+If you prefer to run it from a local clone, `./oc-init` also defaults to the current repo and still resolves to the repository root when you launch it from a nested folder:
 
 ```bash
 ./oc-init
@@ -67,7 +73,7 @@ Local clone with direct replacement of managed files:
 ./oc-init ../target-repo --force
 ```
 
-If a target file already exists, `oc-init` preserves it and writes a `*.oc-init-new` file beside it so you can merge intentionally. Pass `--force` when you want the bootstrap-managed files to be replaced directly.
+If a target file already exists, `oc-init` preserves it and writes a `*.oc-init-new` file beside it so you can merge intentionally. Pass `--force` when you want the bootstrap-managed files to be replaced directly. `.gitignore` is handled differently: `oc-init` appends `.worktrees` when needed instead of replacing the file.
 
 If you want to install from a fork or a non-default ref, pass `--source-base-url https://raw.githubusercontent.com/<owner>/<repo>/<ref>`.
 
@@ -76,13 +82,13 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 1. From inside the target repo, run the remote `curl ... | bash` command, or use `./oc-init` from a local clone if you already have this repository checked out.
 2. Review any generated `*.oc-init-new` files and merge them with the target repository's existing files, or use `--force` when you explicitly want bootstrap-managed files replaced.
 3. Review `AGENTS.md` and adjust branch naming or review conventions if your team uses different defaults.
-4. Complete the repository configuration in `SETUP_REPO.md`.
-5. Commit the copied files in the target repository.
-6. Open an issue or PR comment with `/oc` or `/opencode` to verify the workflow is active.
+4. Commit the copied files in the target repository.
+5. Open an issue or PR comment with `/oc` or `/opencode` to verify the workflow is active.
 
 ## Notes
 
 - The workflows use repository-scoped defaults and do not depend on a hardcoded repository name.
 - Git author configuration is handled inside the workflows so automation can create commits when needed.
+- `oc-init` configures the repository so GitHub Actions can create and approve pull requests.
 - The scheduled workflow is optional; add it with `./oc-init --with-scheduled` or `bash -s -- --with-scheduled` if you want automated periodic repository reviews.
 - `--force` only affects files managed by `oc-init`; it does not touch unrelated repository content.

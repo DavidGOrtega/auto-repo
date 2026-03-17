@@ -3,14 +3,19 @@
 set -euo pipefail
 
 DEFAULT_SOURCE_BASE_URL='https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master'
+WORKTREE_IGNORE_ENTRY='.worktrees'
+OPENCODE_AUTH_PATH=${HOME}/.local/share/opencode/auth.json
 
 usage() {
   cat <<'EOF'
 Usage: ./oc-init [TARGET_REPO] [--with-scheduled] [--force] [--source-base-url URL]
 
-Copy the OpenCode bootstrap files into an existing repository.
+Copy the OpenCode bootstrap files into an existing repository and
+configure the required GitHub repository settings.
 
 When TARGET_REPO is omitted, oc-init uses the current git repository.
+If TARGET_REPO points at a subdirectory inside a git repository, oc-init
+installs into that repository root.
 
 Options:
   --with-scheduled  Include the scheduled review workflow.
@@ -37,6 +42,10 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "$1 is required"
+}
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -75,6 +84,64 @@ done
 [ -n "$SOURCE_BASE_URL" ] || fail 'source base URL must not be empty'
 [ -d "$TARGET_REPO" ] || fail "target repository does not exist: $TARGET_REPO"
 git -C "$TARGET_REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "target repository is not a git repository: $TARGET_REPO"
+TARGET_REPO=$(git -C "$TARGET_REPO" rev-parse --show-toplevel)
+
+resolve_repo_slug() {
+  local remote_url=$1
+  local repo_slug=''
+
+  case "$remote_url" in
+    git@github.com:*)
+      repo_slug=${remote_url#git@github.com:}
+      ;;
+    ssh://git@github.com/*)
+      repo_slug=${remote_url#ssh://git@github.com/}
+      ;;
+    https://github.com/*)
+      repo_slug=${remote_url#https://github.com/}
+      ;;
+    http://github.com/*)
+      repo_slug=${remote_url#http://github.com/}
+      ;;
+    *)
+      fail "target repository origin must point to github.com: $remote_url"
+      ;;
+  esac
+
+  repo_slug=${repo_slug%.git}
+  [ -n "$repo_slug" ] || fail 'failed to determine GitHub repository slug from origin remote'
+  printf '%s\n' "$repo_slug"
+}
+
+ensure_gitignore_entry() {
+  local target_path=$1
+  local target_dir
+  local last_char=''
+
+  target_dir=$(dirname -- "$target_path")
+  mkdir -p -- "$target_dir"
+
+  if [ ! -e "$target_path" ]; then
+    printf '%s\n' "$WORKTREE_IGNORE_ENTRY" > "$target_path"
+    printf 'created: %s\n' "$target_path"
+    return
+  fi
+
+  if grep -Fqx -- "$WORKTREE_IGNORE_ENTRY" "$target_path"; then
+    printf 'unchanged: %s already includes %s\n' "$target_path" "$WORKTREE_IGNORE_ENTRY"
+    return
+  fi
+
+  if [ -s "$target_path" ]; then
+    last_char=$(tail -c 1 "$target_path" 2>/dev/null || true)
+    if [ -n "$last_char" ]; then
+      printf '\n' >> "$target_path"
+    fi
+  fi
+
+  printf '%s\n' "$WORKTREE_IGNORE_ENTRY" >> "$target_path"
+  printf 'updated: %s added %s\n' "$target_path" "$WORKTREE_IGNORE_ENTRY"
+}
 
 resolve_source_path() {
   local relative_path=$1
@@ -123,23 +190,55 @@ copy_file() {
   printf 'copied: %s\n' "$target_path"
 }
 
+configure_github_repo() {
+  local repo_slug=$1
+
+  require_command gh
+  gh auth status >/dev/null 2>&1 || fail 'gh must already be authenticated'
+  [ -f "$OPENCODE_AUTH_PATH" ] || fail "missing OpenCode auth file: $OPENCODE_AUTH_PATH"
+
+  gh label create triage --repo "$repo_slug" --color FBCA04 --description 'Needs initial triage' --force >/dev/null
+  printf 'configured: label triage\n'
+  gh label create bug --repo "$repo_slug" --color D73A4A --description "Something isn't working" --force >/dev/null
+  printf 'configured: label bug\n'
+
+  gh secret set OPENCODE_AUTH_JSON --repo "$repo_slug" < "$OPENCODE_AUTH_PATH" >/dev/null
+  printf 'configured: secret OPENCODE_AUTH_JSON\n'
+
+  gh api --method PUT "repos/$repo_slug/actions/permissions/workflow" \
+    -f default_workflow_permissions=write \
+    -F can_approve_pull_request_reviews=true >/dev/null
+  printf 'configured: GitHub Actions write permissions and PR approvals\n'
+
+  gh api --method PATCH "repos/$repo_slug" \
+    -f allow_merge_commit=false \
+    -f allow_rebase_merge=false \
+    -f allow_squash_merge=true \
+    -f delete_branch_on_merge=true >/dev/null
+  printf 'configured: repository merge settings\n'
+}
+
+require_command git
+ORIGIN_URL=$(git -C "$TARGET_REPO" remote get-url origin 2>/dev/null || true)
+[ -n "$ORIGIN_URL" ] || fail 'target repository must have an origin remote'
+REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
+
 copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
-copy_file '.gitignore' "$TARGET_REPO/.gitignore"
+ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
 copy_file '.github/workflows/issues-triage.yml' "$TARGET_REPO/.github/workflows/issues-triage.yml"
-copy_file 'SETUP_REPO.md' "$TARGET_REPO/SETUP_REPO.md"
 
 if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
   copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
 fi
 
+configure_github_repo "$REPO_SLUG"
+
 printf '\nNext steps:\n'
 if [ "$FORCE" = 'true' ]; then
   printf '1. Review the replaced files in git diff before committing.\n'
-  printf '2. Follow SETUP_REPO.md inside the target repository.\n'
-  printf '3. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
+  printf '2. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
 else
   printf '1. Review any *.oc-init-new files and merge them into your existing files.\n'
-  printf '2. Follow SETUP_REPO.md inside the target repository.\n'
-  printf '3. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
+  printf '2. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
 fi
