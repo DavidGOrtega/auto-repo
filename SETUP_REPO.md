@@ -1,15 +1,18 @@
 ## Apply to an Existing Repository
 
-Copy the bootstrap files from this repository into the target repository before running the setup commands:
+Run `./oc-init /path/to/target-repo` from this repository before running the setup commands.
+
+By default the script copies these files into the target repository:
 
 - `AGENTS.md`
 - `.gitignore`
 - `.github/workflows/opencode.yml`
-- `.github/workflows/opencode-scheduled.yml`
 - `.github/workflows/issues-triage.yml`
 - `SETUP_REPO.md`
 
-If the target repository already has any of these files, merge the relevant changes instead of overwriting them blindly.
+If you also want scheduled repository reviews, run `./oc-init /path/to/target-repo --with-scheduled` to include `.github/workflows/opencode-scheduled.yml`.
+
+If the target repository already has any of these files, the script keeps the current file in place and writes a `*.oc-init-new` copy beside it. Merge the relevant changes instead of overwriting them blindly.
 
 ## Setup Secrets
 
@@ -31,6 +34,7 @@ gh secret set OPENCODE_AUTH_JSON < ~/.local/share/opencode/auth.json
 - `.github/workflows/opencode-scheduled.yml` runs a scheduled review every 12 hours.
 - `.github/workflows/issues-triage.yml` labels new issues with `triage`.
 - `.gitignore` ignores the local `.worktrees` directory used by the branching workflow.
+- `oc-init` is the bootstrap entrypoint that copies these files into an existing repository.
 
 ## Labels
 
@@ -64,6 +68,7 @@ gh api --method PATCH "repos/$(gh repo view --json nameWithOwner -q .nameWithOwn
 
 ## Verification
 
+- Confirm `./oc-init` copied the expected files and that any `*.oc-init-new` files were merged intentionally.
 - Confirm GitHub Actions is enabled in the target repository.
 - Confirm the `OPENCODE_AUTH_JSON` secret exists.
 - Confirm the `triage` and `bug` labels exist.

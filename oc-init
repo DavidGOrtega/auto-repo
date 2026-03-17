@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: ./oc-init TARGET_REPO [--with-scheduled]
+
+Copy the OpenCode bootstrap files into an existing repository.
+
+Options:
+  --with-scheduled  Include the scheduled review workflow.
+  -h, --help        Show this help text.
+EOF
+}
+
+fail() {
+  printf 'error: %s\n' "$1" >&2
+  exit 1
+}
+
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+TARGET_REPO=''
+INCLUDE_SCHEDULED='false'
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --with-scheduled)
+      INCLUDE_SCHEDULED='true'
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown option: $1"
+      ;;
+    *)
+      if [ -n "$TARGET_REPO" ]; then
+        fail 'pass exactly one target repository path'
+      fi
+      TARGET_REPO=$1
+      ;;
+  esac
+  shift
+done
+
+[ -n "$TARGET_REPO" ] || {
+  usage >&2
+  exit 1
+}
+
+[ -d "$TARGET_REPO" ] || fail "target repository does not exist: $TARGET_REPO"
+git -C "$TARGET_REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "target repository is not a git repository: $TARGET_REPO"
+
+copy_file() {
+  local source_path=$1
+  local target_path=$2
+  local target_dir
+
+  target_dir=$(dirname -- "$target_path")
+  mkdir -p -- "$target_dir"
+
+  if [ -e "$target_path" ]; then
+    cp -- "$source_path" "$target_path.oc-init-new"
+    printf 'merge required: %s already exists, wrote %s.oc-init-new\n' "$target_path" "$target_path"
+    return
+  fi
+
+  cp -- "$source_path" "$target_path"
+  printf 'copied: %s\n' "$target_path"
+}
+
+copy_file "$SCRIPT_DIR/AGENTS.md" "$TARGET_REPO/AGENTS.md"
+copy_file "$SCRIPT_DIR/.gitignore" "$TARGET_REPO/.gitignore"
+copy_file "$SCRIPT_DIR/.github/workflows/opencode.yml" "$TARGET_REPO/.github/workflows/opencode.yml"
+copy_file "$SCRIPT_DIR/.github/workflows/issues-triage.yml" "$TARGET_REPO/.github/workflows/issues-triage.yml"
+copy_file "$SCRIPT_DIR/SETUP_REPO.md" "$TARGET_REPO/SETUP_REPO.md"
+
+if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
+  copy_file "$SCRIPT_DIR/.github/workflows/opencode-scheduled.yml" "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
+fi
+
+printf '\nNext steps:\n'
+printf '1. Review any *.oc-init-new files and merge them into your existing files.\n'
+printf '2. Follow SETUP_REPO.md inside the target repository.\n'
+printf '3. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
