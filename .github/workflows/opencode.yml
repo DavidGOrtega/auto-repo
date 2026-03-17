@@ -53,6 +53,11 @@ jobs:
           printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
           chmod 600 "$HOME/.local/share/opencode/auth.json"
 
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:
