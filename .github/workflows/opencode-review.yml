@@ -52,7 +52,17 @@ jobs:
           model: github-copilot/gpt-5.4
           use_github_token: true
           prompt: |
-            Review this pull request:
+            Review only the pull request diff between the base branch and the head branch for this pull request.
+
+            Scope rules:
+            - Review only the files and hunks changed in this pull request.
+            - Do not inspect git history, previous commits, remotes, or unrelated files unless the diff itself is insufficient to confirm a specific issue.
+            - Do not use web search or web fetch.
+            - Do not expand the review to repository-wide analysis.
+            - Prefer no finding over speculative findings.
+            - Keep the review proportional to the size of the diff.
+
+            Review this pull request for:
             - Check for code quality issues
             - Look for potential bugs
             - Suggest improvements
@@ -80,14 +90,24 @@ jobs:
           model: github-copilot/claude-opus-4-6
           use_github_token: true
           prompt: |
-            Review this pull request:
+            Read `${{ env.FIRST_PASS_FILE }}` and then review only the same pull request diff between the base branch and the head branch.
+
+            Scope rules:
+            - Review only the files and hunks changed in this pull request.
+            - Do not inspect git history, previous commits, remotes, or unrelated files unless the diff itself is insufficient to confirm a specific issue.
+            - Do not use web search or web fetch.
+            - Do not expand the review to repository-wide analysis.
+            - Prefer no finding over speculative findings.
+            - Keep the review proportional to the size of the diff.
+
+            Review this pull request for:
             - Check for code quality issues
             - Look for potential bugs
             - Suggest improvements
             - Detect modifications outside the intended PR scope
             - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
 
-            First, read `${{ env.FIRST_PASS_FILE }}` and treat it as the first reviewer output.
+            Treat `${{ env.FIRST_PASS_FILE }}` as the first reviewer output.
             Then perform your own review and produce one combined final result from both passes.
 
             Write exactly two files and do not post anything to GitHub yourself:
