@@ -1,0 +1,125 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: read
+    env:
+      GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
+      REVIEW_DIR: .opencode/review
+      FIRST_PASS_FILE: .opencode/review/first-pass.md
+      FINAL_REVIEW_FILE: .opencode/review/final-review.md
+      FINAL_REVIEW_JSON: .opencode/review/final-review.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Prepare review workspace
+        run: mkdir -p "$REVIEW_DIR"
+
+      - name: First review pass with GPT-5.4
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: github-copilot/gpt-5.4
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
+            - Detect modifications outside the intended PR scope
+            - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+            Write your findings only to `${{ env.FIRST_PASS_FILE }}` as Markdown with these sections:
+            - `## Verdict`
+            - `## Findings`
+            - `## Out-of-Scope Changes`
+            - `## Suggested Follow-ups`
+
+            Rules:
+            - Do not post any GitHub comment or review.
+            - Do not edit repository files except `${{ env.FIRST_PASS_FILE }}`.
+            - Be explicit when a change is out of scope.
+            - If no actionable issues exist, write `No actionable issues found.` in `## Findings`.
+            - Keep the file self-contained so the second reviewer can use it directly.
+
+      - name: Second review pass with Claude Opus 4.6
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: github-copilot/claude-opus-4-6
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
+            - Detect modifications outside the intended PR scope
+            - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+            First, read `${{ env.FIRST_PASS_FILE }}` and treat it as the first reviewer output.
+            Then perform your own review and produce one combined final result from both passes.
+
+            Write exactly two files and do not post anything to GitHub yourself:
+            1. `${{ env.FINAL_REVIEW_FILE }}` containing the final Markdown review body.
+            2. `${{ env.FINAL_REVIEW_JSON }}` containing strict JSON with this shape:
+               {"verdict":"needs_changes|lgtm","body":"<same markdown review body>"}
+
+            Final review rules:
+            - If either pass finds actionable issues, set `verdict` to `needs_changes`.
+            - If `verdict` is `needs_changes`, include `/oc` exactly once at the end of the Markdown body.
+            - If `verdict` is `lgtm`, begin the Markdown body with `LGTM` and do not include `/oc` anywhere.
+            - Include a short section that clearly calls out out-of-scope changes when present.
+            - Keep the final review concise, technical, and actionable.
+            - The Markdown in `${{ env.FINAL_REVIEW_FILE }}` must exactly match the `body` value in `${{ env.FINAL_REVIEW_JSON }}`.
+            - The final result must be published on the current pull request thread only, never on the original issue thread.
+
+      - name: Validate final review payload
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path(".opencode/review/final-review.json").read_text())
+          verdict = payload.get("verdict")
+          body = payload.get("body")
+
+          if verdict not in {"needs_changes", "lgtm"}:
+              raise SystemExit(f"unexpected verdict: {verdict!r}")
+          if not isinstance(body, str) or not body.strip():
+              raise SystemExit("final review body must be a non-empty string")
+          if verdict == "needs_changes" and "/oc" not in body:
+              raise SystemExit("needs_changes review must include /oc")
+          if verdict == "lgtm" and "/oc" in body:
+              raise SystemExit("lgtm review must not include /oc")
+
+          Path(".opencode/review/final-review.md").write_text(body)
+          PY
+
+      - name: Publish combined review comment on PR
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR_NUMBER" --body-file "$FINAL_REVIEW_FILE"
