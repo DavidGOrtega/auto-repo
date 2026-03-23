@@ -31,7 +31,6 @@ jobs:
       pull-requests: write
       issues: read
     env:
-      GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
       REVIEW_DIR: .opencode/review
       FIRST_PASS_FILE: .opencode/review/first-pass.md
       FINAL_REVIEW_FILE: .opencode/review/final-review.md
@@ -55,6 +54,8 @@ jobs:
 
       - name: First review pass with GPT-5.4
         uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: github-copilot/gpt-5.4
           mentions: /reviewer
@@ -82,6 +83,8 @@ jobs:
 
       - name: Second review pass with Claude Opus 4.6
         uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: github-copilot/claude-opus-4-6
           use_github_token: true

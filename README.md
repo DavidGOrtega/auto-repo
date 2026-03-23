@@ -108,5 +108,6 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 - The workflows use repository-scoped defaults and do not depend on a hardcoded repository name.
 - Git author configuration is handled inside the workflows so automation can create commits when needed.
 - `oc-init` configures the repository so GitHub Actions can create and approve pull requests.
+- Do not expect OpenCode automation to create or edit workflow files automatically. GitHub blocks workflow-file writes unless the token has explicit workflow permission, so workflow changes should be reviewed and applied manually.
 - The scheduled workflow is optional; add it with `./oc-init --with-scheduled` or `bash -s -- --with-scheduled` if you want automated periodic repository reviews.
 - `--force` only affects files managed by `oc-init`; it does not touch unrelated repository content.
