@@ -1,0 +1,178 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Install OpenCode CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL https://opencode.ai/install | bash
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Collect pull request context
+        run: |
+          set -euo pipefail
+          gh pr view "$PR_NUMBER" \
+            --json number,title,body,author,baseRefName,headRefName,isDraft,url,files,commits \
+            > "$RUNNER_TEMP/pr-context.json"
+          gh pr diff "$PR_NUMBER" > "$RUNNER_TEMP/pr.diff"
+
+      - name: Review pass 1
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/reviewer-1-prompt.txt" <<'EOF'
+          Review this pull request.
+
+          Check for:
+          - code quality issues
+          - potential bugs
+          - suggested improvements
+          - modifications outside the intended PR scope
+
+          Explicitly flag any changes that should not be allowed because they modify code outside the PR scope.
+
+          Use the attached PR metadata and diff as your source of truth.
+
+          Return Markdown with exactly these sections:
+          ## Findings
+          - One bullet per actionable issue, including severity (`high`, `medium`, or `low`) and file paths when possible.
+          ## Scope Review
+          - State whether you found out-of-scope changes.
+          ## Verdict
+          - Write `No actionable issues found.` if the PR is clean.
+          EOF
+
+          REVIEWER_1_PROMPT=$(python - <<'PY'
+          from pathlib import Path
+          import os
+          print((Path(os.environ['RUNNER_TEMP']) / 'reviewer-1-prompt.txt').read_text())
+          PY
+          )
+
+          opencode run \
+            --model github-copilot/gpt-5.4 \
+            --share false \
+            --file "$RUNNER_TEMP/pr-context.json" \
+            --file "$RUNNER_TEMP/pr.diff" \
+            "$REVIEWER_1_PROMPT" \
+            > "$RUNNER_TEMP/review-pass-1.md"
+
+      - name: Review pass 2
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/reviewer-2-prompt.txt" <<'EOF'
+          Review this pull request and produce the final combined review.
+
+          Check for:
+          - code quality issues
+          - potential bugs
+          - suggested improvements
+          - modifications outside the intended PR scope
+
+          You also have the first review pass. Merge both reviews into one final result, deduplicate overlapping points, and resolve disagreements conservatively.
+
+          Output rules:
+          - The first line must be exactly `VERDICT: CHANGES_REQUESTED` or `VERDICT: LGTM`.
+          - After the first line, return Markdown only.
+          - Include a `## Combined Findings` section.
+          - Include a `## Scope Review` section that explicitly states whether out-of-scope changes were found.
+          - If there are actionable fixes, end the response with `/oc` on its own line.
+          - If there are no actionable fixes, write an `LGTM` style result and do not include `/oc` anywhere.
+          EOF
+
+          REVIEWER_2_PROMPT=$(python - <<'PY'
+          from pathlib import Path
+          import os
+          print((Path(os.environ['RUNNER_TEMP']) / 'reviewer-2-prompt.txt').read_text())
+          PY
+          )
+
+          opencode run \
+            --model github-copilot/claude-opus-4-6 \
+            --share false \
+            --file "$RUNNER_TEMP/pr-context.json" \
+            --file "$RUNNER_TEMP/pr.diff" \
+            --file "$RUNNER_TEMP/review-pass-1.md" \
+            "$REVIEWER_2_PROMPT" \
+            > "$RUNNER_TEMP/final-review.txt"
+
+      - name: Prepare final review body
+        id: review_body
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          final_review = Path(os.environ['RUNNER_TEMP']) / 'final-review.txt'
+          review_body = Path(os.environ['RUNNER_TEMP']) / 'final-review-body.md'
+          text = final_review.read_text().strip()
+
+          if not text:
+            raise SystemExit('final review output was empty')
+
+          lines = text.splitlines()
+          if not lines[0].startswith('VERDICT: '):
+            raise SystemExit('final review output must start with a VERDICT line')
+
+          verdict = lines[0].split(':', 1)[1].strip()
+          body = '\n'.join(lines[1:]).strip()
+
+          if not body:
+            raise SystemExit('final review body was empty')
+
+          if verdict == 'CHANGES_REQUESTED' and '/oc' not in body.split():
+            raise SystemExit('changes requested review must include /oc')
+
+          if verdict == 'LGTM' and '/oc' in body:
+            raise SystemExit('LGTM review must not include /oc')
+
+          review_body.write_text(body + '\n')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+            output.write(f'verdict={verdict}\n')
+          PY
+
+      - name: Publish changes requested review
+        if: steps.review_body.outputs.verdict == 'CHANGES_REQUESTED' && !github.event.pull_request.draft
+        run: gh pr review "$PR_NUMBER" --request-changes --body-file "$RUNNER_TEMP/final-review-body.md"
+
+      - name: Publish changes requested comment for draft pull requests
+        if: steps.review_body.outputs.verdict == 'CHANGES_REQUESTED' && github.event.pull_request.draft
+        run: gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/final-review-body.md"
+
+      - name: Publish approval review
+        if: steps.review_body.outputs.verdict == 'LGTM' && !github.event.pull_request.draft
+        run: gh pr review "$PR_NUMBER" --approve --body-file "$RUNNER_TEMP/final-review-body.md"
+
+      - name: Publish LGTM comment for draft pull requests
+        if: steps.review_body.outputs.verdict == 'LGTM' && github.event.pull_request.draft
+        run: gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/final-review-body.md"
