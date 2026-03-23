@@ -3,6 +3,8 @@ name: opencode-review
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
 
 concurrency:
   group: opencode-review-${{ github.event.pull_request.number }}
@@ -10,7 +12,17 @@ concurrency:
 
 jobs:
   review:
-    if: ${{ !github.event.pull_request.draft }}
+    if: |
+      (
+        github.event_name == 'pull_request' &&
+        github.actor == 'github-actions[bot]'
+      ) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '/reviewer') &&
+        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -45,6 +57,7 @@ jobs:
         uses: anomalyco/opencode/github@latest
         with:
           model: github-copilot/gpt-5.4
+          mentions: /reviewer
           use_github_token: true
           prompt: |
             Review this pull request:
@@ -90,8 +103,8 @@ jobs:
 
             Final review rules:
             - If either pass finds actionable issues, set `verdict` to `needs_changes`.
-            - If `verdict` is `needs_changes`, include `/oc` exactly once at the end of the Markdown body.
-            - If `verdict` is `lgtm`, begin the Markdown body with `LGTM` and do not include `/oc` anywhere.
+            - If `verdict` is `needs_changes`, include `/coder` exactly once at the end of the Markdown body.
+            - If `verdict` is `lgtm`, begin the Markdown body with `LGTM` and do not include `/coder` anywhere.
             - Include a short section that clearly calls out out-of-scope changes when present.
             - Keep the final review concise, technical, and actionable.
             - The Markdown in `${{ env.FINAL_REVIEW_FILE }}` must exactly match the `body` value in `${{ env.FINAL_REVIEW_JSON }}`.
@@ -111,10 +124,10 @@ jobs:
               raise SystemExit(f"unexpected verdict: {verdict!r}")
           if not isinstance(body, str) or not body.strip():
               raise SystemExit("final review body must be a non-empty string")
-          if verdict == "needs_changes" and "/oc" not in body:
-              raise SystemExit("needs_changes review must include /oc")
-          if verdict == "lgtm" and "/oc" in body:
-              raise SystemExit("lgtm review must not include /oc")
+          if verdict == "needs_changes" and "/coder" not in body:
+              raise SystemExit("needs_changes review must include /coder")
+          if verdict == "lgtm" and "/coder" in body:
+              raise SystemExit("lgtm review must not include /coder")
 
           Path(".opencode/review/final-review.md").write_text(body)
           PY
