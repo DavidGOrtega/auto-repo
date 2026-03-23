@@ -47,7 +47,7 @@ jobs:
       - name: First review pass with GPT-5.4
         uses: anomalyco/opencode/github@latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
         with:
           model: github-copilot/gpt-5.4
           use_github_token: true
@@ -75,7 +75,7 @@ jobs:
       - name: Second review pass with Claude Opus 4.6
         uses: anomalyco/opencode/github@latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
         with:
           model: github-copilot/claude-opus-4-6
           use_github_token: true
