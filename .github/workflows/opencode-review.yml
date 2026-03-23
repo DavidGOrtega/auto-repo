@@ -4,24 +4,18 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
-concurrency:
-  group: opencode-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     permissions:
       id-token: write
       contents: read
-      pull-requests: write
+      pull-requests: read
       issues: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          persist-credentials: false
 
       - name: Restore OpenCode credentials
         env:
@@ -36,115 +30,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Prepare review workspace
-        run: |
-          mkdir -p "$RUNNER_TEMP/opencode-review"
-          printf 'REVIEW_DIR=%s\n' "$RUNNER_TEMP/opencode-review" >> "$GITHUB_ENV"
-          printf 'FIRST_PASS_FILE=%s\n' "$RUNNER_TEMP/opencode-review/first-pass.md" >> "$GITHUB_ENV"
-          printf 'FINAL_REVIEW_FILE=%s\n' "$RUNNER_TEMP/opencode-review/final-review.md" >> "$GITHUB_ENV"
-          printf 'FINAL_REVIEW_JSON=%s\n' "$RUNNER_TEMP/opencode-review/final-review.json" >> "$GITHUB_ENV"
-
-      - name: First review pass with GPT-5.4
-        uses: anomalyco/opencode/github@latest
+      - uses: anomalyco/opencode/github@latest
         env:
           GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
         with:
-          model: github-copilot/gpt-5.4
+          model: github-copilot/claude-opus-4.6
           use_github_token: true
           prompt: |
-            Review only the pull request diff between the base branch and the head branch for this pull request.
-
-            Scope rules:
-            - Review only the files and hunks changed in this pull request.
-            - Do not inspect git history, previous commits, remotes, or unrelated files unless the diff itself is insufficient to confirm a specific issue.
-            - Do not use web search or web fetch.
-            - Do not expand the review to repository-wide analysis.
-            - Prefer no finding over speculative findings.
-            - Keep the review proportional to the size of the diff.
-
-            Review this pull request for:
-            - Check for code quality issues
-            - Look for potential bugs
-            - Suggest improvements
-            - Detect modifications outside the intended PR scope
-            - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
-
-            Write your findings only to `${{ env.FIRST_PASS_FILE }}` as Markdown with these sections:
-            - `## Verdict`
-            - `## Findings`
-            - `## Out-of-Scope Changes`
-            - `## Suggested Follow-ups`
-
-            Rules:
-            - Do not post any GitHub comment or review.
-            - Do not edit repository files except `${{ env.FIRST_PASS_FILE }}`.
-            - Be explicit when a change is out of scope.
-            - If no actionable issues exist, write `No actionable issues found.` in `## Findings`.
-            - Keep the file self-contained so the second reviewer can use it directly.
-
-      - name: Second review pass with Claude Opus 4.6
-        uses: anomalyco/opencode/github@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
-        with:
-          model: github-copilot/claude-opus-4-6
-          use_github_token: true
-          prompt: |
-            Read `${{ env.FIRST_PASS_FILE }}` and then review only the same pull request diff between the base branch and the head branch.
-
-            Scope rules:
-            - Review only the files and hunks changed in this pull request.
-            - Do not inspect git history, previous commits, remotes, or unrelated files unless the diff itself is insufficient to confirm a specific issue.
-            - Do not use web search or web fetch.
-            - Do not expand the review to repository-wide analysis.
-            - Prefer no finding over speculative findings.
-            - Keep the review proportional to the size of the diff.
-
-            Review this pull request for:
-            - Check for code quality issues
-            - Look for potential bugs
-            - Suggest improvements
-            - Detect modifications outside the intended PR scope
-            - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
-
-            Treat `${{ env.FIRST_PASS_FILE }}` as the first reviewer output.
-            Then perform your own review and produce one combined final result from both passes.
-
-            Write exactly two files and do not post anything to GitHub yourself:
-            1. `${{ env.FINAL_REVIEW_FILE }}` containing the final Markdown review body.
-            2. `${{ env.FINAL_REVIEW_JSON }}` containing strict JSON with this shape:
-               {"verdict":"needs_changes|lgtm","body":"<same markdown review body>"}
-
-            Final review rules:
-            - If either pass finds actionable issues, set `verdict` to `needs_changes`.
-            - If `verdict` is `needs_changes`, ask for changes clearly but do not include `/coder` or any other trigger command.
-            - If `verdict` is `lgtm`, begin the Markdown body with `LGTM`.
-            - Include a short section that clearly calls out out-of-scope changes when present.
-            - Keep the final review concise, technical, and actionable.
-            - The Markdown in `${{ env.FINAL_REVIEW_FILE }}` must exactly match the `body` value in `${{ env.FINAL_REVIEW_JSON }}`.
-            - The final result must be published on the current pull request thread only, never on the original issue thread.
-
-      - name: Validate final review payload
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          payload = json.loads(Path("${FINAL_REVIEW_JSON}").read_text())
-          verdict = payload.get("verdict")
-          body = payload.get("body")
-
-          if verdict not in {"needs_changes", "lgtm"}:
-              raise SystemExit(f"unexpected verdict: {verdict!r}")
-          if not isinstance(body, str) or not body.strip():
-              raise SystemExit("final review body must be a non-empty string")
-          if "/coder" in body:
-              raise SystemExit("review body must not include /coder")
-
-          Path("${FINAL_REVIEW_FILE}").write_text(body)
-          PY
-
-      - name: Publish combined review comment on PR
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr comment "$PR_NUMBER" --body-file "$FINAL_REVIEW_FILE"
+            You are a code review assistant. 
+            Review the code following the following criteria:
+            1. Code Quality: Is the code clean, well-structured.
+            2. Functionality: Does the code work as intended and meet the requirements?
+            3. Reject all the modifications that are outside of the scope of the pull request. Ask for follow-up issues instead.
+            4. Write the review:
+              If the code needs changes be precise and make an enumerated list of all the changes you request. Use "/coder fix this" at the end of the review.
+              If it does not need changes say "LGTM" and do not request any changes.
+              If you have reviewed the code 5 times or more just stop for other peer reviewer. Do not ask for more changes.
