@@ -1,0 +1,97 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  first-pass:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      review: ${{ steps.capture.outputs.review }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - id: review
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: github-copilot/gpt-5.4
+          use_github_token: true
+          prompt: |
+            Review this pull request.
+
+            Focus on:
+            - code quality issues
+            - potential bugs
+            - suggested improvements
+            - modifications outside the intended PR scope
+            - changes that should not be allowed because they modify code outside the PR scope
+
+            Return JSON with this shape:
+            {
+              "summary": "short overall assessment",
+              "issues": [
+                {
+                  "severity": "high|medium|low",
+                  "path": "file path or empty string",
+                  "title": "short title",
+                  "details": "why it matters"
+                }
+              ],
+              "lgtm": true
+            }
+
+      - id: capture
+        shell: bash
+        run: |
+          review_file=$(mktemp)
+          cat <<'EOF' > "$review_file"
+          ${{ steps.review.outputs.result }}
+          EOF
+          review_json=$(python -c 'import json, pathlib, sys; print(json.dumps(pathlib.Path(sys.argv[1]).read_text()))' "$review_file")
+          printf 'review=%s\n' "$review_json" >> "$GITHUB_OUTPUT"
+
+  combined-review:
+    needs: first-pass
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - id: review
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: github-copilot/claude-opus-4.6
+          use_github_token: true
+          prompt: |
+            Review this pull request using the first reviewer output as additional context.
+
+            First reviewer output:
+            ${{ fromJson(needs.first-pass.outputs.review) }}
+
+            Produce one final combined review.
+
+            Requirements:
+            - include findings from both review passes
+            - call out code quality issues, potential bugs, and suggested improvements
+            - explicitly flag modifications outside the intended PR scope
+            - explicitly flag changes that should not be allowed because they modify code outside the PR scope
+            - if fixes are needed, end the review with `/oc`
+            - if no fixes are needed, return an LGTM-style review and do not include `/oc`

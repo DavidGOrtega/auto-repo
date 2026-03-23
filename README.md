@@ -15,7 +15,7 @@ This repository is the bootstrap source for that command.
 When you run `oc-init`, it:
 
 - resolves the target repo to the git root, even if you launch it from a nested folder
-- copies `AGENTS.md`, `.github/workflows/opencode.yml`, and `.github/workflows/issues-triage.yml`
+- copies `AGENTS.md` and `.github/workflows/opencode.yml`
 - optionally copies `.github/workflows/opencode-scheduled.yml` when you pass `--with-scheduled`
 - updates `.gitignore` by appending `.worktrees` only when that entry is missing
 - writes `*.oc-init-new` files instead of overwriting existing managed files, unless you pass `--force`
@@ -31,9 +31,10 @@ By default, existing repository content stays in place. `--force` only replaces 
 - `AGENTS.md` with repository workflow and contribution guidance for OpenCode sessions.
 - `.github/workflows/opencode.yml` to run OpenCode from issue comments and PR review activity.
 - `.github/workflows/opencode-scheduled.yml` to perform scheduled repository reviews.
-- `.github/workflows/issues-triage.yml` to label newly opened issues with `triage`.
 - `.gitignore` updated to include the local `.worktrees` convention used by the branching guide.
 - GitHub labels, secret, workflow permissions, PR approval permissions, and merge settings configured through `gh`.
+
+This repository may also keep draft workflow content under `docs/` when a workflow file cannot yet be added under `.github/workflows/`.
 
 ## Quick start
 
