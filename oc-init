@@ -197,8 +197,6 @@ configure_github_repo() {
   gh auth status >/dev/null 2>&1 || fail 'gh must already be authenticated'
   [ -f "$OPENCODE_AUTH_PATH" ] || fail "missing OpenCode auth file: $OPENCODE_AUTH_PATH"
 
-  gh label create triage --repo "$repo_slug" --color FBCA04 --description 'Needs initial triage' --force >/dev/null
-  printf 'configured: label triage\n'
   gh label create bug --repo "$repo_slug" --color D73A4A --description "Something isn't working" --force >/dev/null
   printf 'configured: label bug\n'
 
@@ -226,7 +224,7 @@ REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
-copy_file '.github/workflows/issues-triage.yml' "$TARGET_REPO/.github/workflows/issues-triage.yml"
+copy_file '.github/workflows/opencode-review.yml' "$TARGET_REPO/.github/workflows/opencode-review.yml"
 
 if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
   copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
