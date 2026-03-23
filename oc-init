@@ -237,8 +237,8 @@ configure_github_repo "$REPO_SLUG"
 printf '\nNext steps:\n'
 if [ "$FORCE" = 'true' ]; then
   printf '1. Review the replaced files in git diff before committing.\n'
-  printf '2. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
+  printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
 else
   printf '1. Review any *.oc-init-new files and merge them into your existing files.\n'
-  printf '2. Add /oc or /opencode to an issue or PR thread to verify the workflow.\n'
+  printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
 fi
