@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.OPENCODE_PUSH_TOKEN }}
 
       - name: Restore OpenCode credentials
         env:
@@ -32,7 +34,7 @@ jobs:
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.OPENCODE_PUSH_TOKEN }}
         with:
           model: github-copilot/gpt-5.4
           use_github_token: true
