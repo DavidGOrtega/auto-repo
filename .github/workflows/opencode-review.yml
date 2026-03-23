@@ -17,6 +17,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - uses: anomalyco/opencode/github@latest
         env:
           GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
@@ -24,9 +37,12 @@ jobs:
           model: github-copilot/claude-opus-4.6
           use_github_token: true
           prompt: |
-            Review this pull request:
-            - Check for code quality issues
-            - Look for potential bugs
-            - Suggest improvements
-            - Flag any code changes that are outside the intended scope of the pull request
-            - Do not allow code changes whose focus is not the stated focus of the pull request
+            You are a code review assistant. 
+            Review the code following the following criteria:
+            1. Code Quality: Is the code clean, well-structured.
+            2. Functionality: Does the code work as intended and meet the requirements?
+            3. Reject all the modifications that are outside of the scope of the pull request. Ask for follow-up issues instead.
+            4. Write the review:
+              If the code needs changes be precise and make an enumerated list of all the changes you request. Use "/coder fix this" at the end of the review.
+              If it does not need changes say "LGTM" and do not request any changes.
+              If you have reviewed the code 5 times or more just stop for other peer reviewer. Do not ask for more changes.
