@@ -100,7 +100,7 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 2. Review any generated `*.oc-init-new` files and merge them with the target repository's existing files, or use `--force` when you explicitly want bootstrap-managed files replaced.
 3. Review `AGENTS.md` and adjust branch naming or review conventions if your team uses different defaults.
 4. Commit the copied files in the target repository.
-5. Open an issue or PR comment with `/oc` or `/opencode` to verify the workflow is active.
+5. Open an issue or PR comment with `/coder` to verify the workflow is active.
 
 ## Notes
 
