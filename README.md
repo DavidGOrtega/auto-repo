@@ -110,3 +110,6 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 - OpenCode uses the default `GITHUB_TOKEN` by default, but if you need workflow-triggered PR creation or chained automation between workflows, a dedicated higher-privilege token may still be required.
 - The scheduled workflow is optional; add it with `./oc-init --with-scheduled` or `bash -s -- --with-scheduled` if you want automated periodic repository reviews.
 - `--force` only affects files managed by `oc-init`; it does not touch unrelated repository content.
+
+
+Updated
