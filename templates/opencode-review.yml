@@ -1,0 +1,190 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+          mkdir -p .opencode/reviews
+
+      - name: First review pass
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: github-copilot/gpt-5.4
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
+            - Detect modifications outside the intended PR scope
+            - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+            Work only in the checked out repository and do not publish any GitHub comments, reviews, issues, commits, or pull requests.
+            Write your findings to `.opencode/reviews/pass-1.md`.
+
+            Use this exact format:
+
+            # First Pass Review
+            Decision: NEEDS_CHANGES or LGTM
+
+            ## Summary
+            <1-2 sentences>
+
+            ## Findings
+            - <finding or write "- None.">
+
+            ## Out of Scope
+            - <out-of-scope change or write "- None.">
+
+      - name: Second review pass
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: github-copilot/claude-opus-4-6
+          use_github_token: true
+          prompt: |
+            Review this pull request again with a second reviewer perspective.
+
+            Before deciding, read `.opencode/reviews/pass-1.md` and incorporate the first reviewer's conclusions into one final combined review.
+
+            Evaluate:
+            - code quality issues
+            - potential bugs
+            - suggested improvements
+            - modifications outside the intended PR scope
+            - changes that should not be allowed because they modify code outside the PR scope
+
+            Work only in the checked out repository and do not publish any GitHub comments, reviews, issues, commits, or pull requests.
+            Overwrite `.opencode/reviews/final.json` with a single valid JSON object using this exact schema:
+
+            {
+              "decision": "needs_changes or lgtm",
+              "summary": "1-2 sentence combined review summary",
+              "findings": [
+                {
+                  "severity": "high or medium or low",
+                  "title": "short title",
+                  "details": "specific explanation and suggested fix"
+                }
+              ],
+              "out_of_scope": [
+                {
+                  "title": "short title",
+                  "details": "why the change is outside scope or should not be allowed"
+                }
+              ]
+            }
+
+            Rules:
+            - Use `decision: needs_changes` if there is any actionable fix or any disallowed out-of-scope change.
+            - Use `decision: lgtm` only when there are no actionable findings and no out-of-scope concerns.
+            - Use empty arrays when there are no findings for a section.
+
+      - name: Publish combined review
+        uses: actions/github-script@v7
+        env:
+          REVIEW_PATH: .opencode/reviews/final.json
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs')
+
+            const marker = '<!-- opencode-review -->'
+            const review = JSON.parse(fs.readFileSync(process.env.REVIEW_PATH, 'utf8'))
+
+            const findings = Array.isArray(review.findings) ? review.findings : []
+            const outOfScope = Array.isArray(review.out_of_scope) ? review.out_of_scope : []
+            const needsChanges = review.decision === 'needs_changes'
+            const summary = review.summary || 'Combined review completed.'
+
+            const lines = [
+              marker,
+              '## OpenCode PR Review',
+              '',
+              summary,
+              ''
+            ]
+
+            if (findings.length > 0) {
+              lines.push('### Findings', '')
+              for (const finding of findings) {
+                const severity = finding.severity ? ` (${finding.severity})` : ''
+                lines.push(`- ${finding.title || 'Finding'}${severity}: ${finding.details || ''}`.trim())
+              }
+              lines.push('')
+            }
+
+            if (outOfScope.length > 0) {
+              lines.push('### Out-of-Scope Changes', '')
+              for (const item of outOfScope) {
+                lines.push(`- ${item.title || 'Out-of-scope change'}: ${item.details || ''}`.trim())
+              }
+              lines.push('')
+            }
+
+            if (needsChanges) {
+              lines.push('Action requested: please address the items above.', '', '/oc')
+            } else {
+              lines.push('LGTM - both review passes did not identify actionable issues.')
+            }
+
+            const body = lines.join('\n')
+            const issue_number = context.issue.number
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            })
+
+            const existing = comments.find((comment) => {
+              return comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            })
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              })
+              core.info(`Updated review comment ${existing.id}`)
+            } else {
+              const response = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              })
+              core.info(`Created review comment ${response.data.id}`)
+            }
