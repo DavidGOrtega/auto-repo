@@ -71,7 +71,7 @@ jobs:
 
   opencode-retry:
     needs: opencode
-    if: ${{ needs.opencode.result == 'failure' }}
+    if: ${{ always() && needs.opencode.result != 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
