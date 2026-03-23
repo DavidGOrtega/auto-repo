@@ -1,0 +1,181 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PRIMARY_MODEL: github-copilot/gpt-5.4
+      SECONDARY_MODEL: github-copilot/claude-opus-4-6
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      REVIEW_DIR: .opencode/review
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch base branch
+        run: git fetch origin "${BASE_REF}" --depth=1
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Install OpenCode CLI
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Add OpenCode to PATH
+        run: echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Build review context
+        run: |
+          mkdir -p "$REVIEW_DIR"
+          gh pr view "$PR_NUMBER" \
+            --json title,body,author,baseRefName,headRefName,additions,deletions,changedFiles,commits \
+            > "$REVIEW_DIR/pr.json"
+          git diff --name-only "origin/${BASE_REF}...HEAD" > "$REVIEW_DIR/changed-files.txt"
+          git diff --stat "origin/${BASE_REF}...HEAD" > "$REVIEW_DIR/diffstat.txt"
+          git diff --unified=3 "origin/${BASE_REF}...HEAD" > "$REVIEW_DIR/pr.diff"
+          cat <<EOF > "$REVIEW_DIR/instructions.md"
+          Review this pull request:
+          - Check for code quality issues
+          - Look for potential bugs
+          - Suggest improvements
+          - Detect modifications outside the intended PR scope
+          - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+          EOF
+
+      - name: First review pass
+        run: |
+          PROMPT=$(cat <<'EOF'
+          Review this pull request using the attached PR metadata and diff.
+
+          Focus on:
+          - code quality issues
+          - potential bugs
+          - suggested improvements
+          - modifications outside the intended PR scope
+          - changes that should not be allowed because they modify code outside the PR scope
+
+          Return markdown only.
+          Use these sections exactly:
+          ## Pass 1 Summary
+          ## Actionable Findings
+          ## Out-of-Scope Changes
+          ## Good Signals
+
+          In `## Actionable Findings`, use bullets in the form:
+          - [severity] path or scope - problem - why it matters - concrete fix
+
+          If there are no actionable findings for a section, write `- None`.
+          EOF
+          )
+          opencode run \
+            -m "$PRIMARY_MODEL" \
+            -f "$REVIEW_DIR/instructions.md" \
+            -f "$REVIEW_DIR/pr.json" \
+            -f "$REVIEW_DIR/changed-files.txt" \
+            -f "$REVIEW_DIR/diffstat.txt" \
+            -f "$REVIEW_DIR/pr.diff" \
+            "$PROMPT" > "$REVIEW_DIR/pass1.md"
+
+      - name: Second review pass and synthesis
+        run: |
+          PROMPT=$(cat <<'EOF'
+          Review this pull request independently, then synthesize your review with the first pass findings in `pass1.md`.
+
+          Focus on:
+          - code quality issues
+          - potential bugs
+          - suggested improvements
+          - modifications outside the intended PR scope
+          - changes that should not be allowed because they modify code outside the PR scope
+
+          Return markdown only.
+          The first line must be exactly one of:
+          STATUS: CHANGES_REQUESTED
+          STATUS: LGTM
+
+          After the status line, use these sections exactly:
+          ## Combined Summary
+          ## Actionable Findings
+          ## Out-of-Scope Changes
+          ## Final Verdict
+
+          Rules:
+          - Merge both reviewers into one final outcome.
+          - Keep only actionable findings in `## Actionable Findings`.
+          - If no actionable fixes are needed, set `STATUS: LGTM`, make `## Actionable Findings` be `- None`, and do not include `/oc` anywhere.
+          - If fixes are needed, set `STATUS: CHANGES_REQUESTED` and end the response with `/oc` on its own line.
+          - Explicitly call out out-of-scope changes that should not be allowed.
+          EOF
+          )
+          opencode run \
+            -m "$SECONDARY_MODEL" \
+            -f "$REVIEW_DIR/instructions.md" \
+            -f "$REVIEW_DIR/pr.json" \
+            -f "$REVIEW_DIR/changed-files.txt" \
+            -f "$REVIEW_DIR/diffstat.txt" \
+            -f "$REVIEW_DIR/pr.diff" \
+            -f "$REVIEW_DIR/pass1.md" \
+            "$PROMPT" > "$REVIEW_DIR/final-raw.md"
+
+      - name: Normalize final review
+        id: normalize
+        run: |
+          python <<'PY'
+          import os
+          from pathlib import Path
+
+          raw_path = Path('.opencode/review/final-raw.md')
+          final_path = Path('.opencode/review/final-review.md')
+          text = raw_path.read_text().strip()
+          if not text:
+              raise SystemExit('final review is empty')
+
+          lines = text.splitlines()
+          status_line = lines[0].strip()
+          if status_line not in {'STATUS: CHANGES_REQUESTED', 'STATUS: LGTM'}:
+              raise SystemExit(f'invalid status line: {status_line}')
+
+          status = status_line.removeprefix('STATUS: ').strip()
+          body_lines = [line for line in lines[1:] if line.strip() != '/oc']
+          body = '\n'.join(body_lines).strip()
+
+          if status == 'LGTM':
+              if not body:
+                  body = 'LGTM. Both review passes found no actionable issues.'
+          else:
+              if not body:
+                  body = 'The combined review found actionable issues that should be addressed before merge.'
+              body = body.rstrip() + '\n\n/oc'
+
+          final_path.write_text(body + '\n')
+          github_output = Path(os.environ['GITHUB_OUTPUT'])
+          with github_output.open('a') as fh:
+              fh.write(f'status={status}\n')
+          PY
+
+      - name: Submit combined review
+        run: |
+          if [ "${{ steps.normalize.outputs.status }}" = 'LGTM' ]; then
+            gh pr review "$PR_NUMBER" --approve --body-file "$REVIEW_DIR/final-review.md"
+          else
+            gh pr review "$PR_NUMBER" --request-changes --body-file "$REVIEW_DIR/final-review.md"
+          fi
