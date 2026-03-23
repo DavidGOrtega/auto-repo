@@ -5,10 +5,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
-  pull_request_review:
-    types: [submitted]
 
 concurrency:
   group: opencode-review-${{ github.event.pull_request.number }}
@@ -26,16 +22,6 @@ jobs:
         github.event.issue.pull_request &&
         contains(github.event.comment.body, '/reviewer') &&
         contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
-      ) ||
-      (
-        github.event_name == 'pull_request_review_comment' &&
-        contains(github.event.comment.body, '/reviewer') &&
-        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
-      ) ||
-      (
-        github.event_name == 'pull_request_review' &&
-        contains(github.event.review.body, '/reviewer') &&
-        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)
       )
     runs-on: ubuntu-latest
     timeout-minutes: 20
