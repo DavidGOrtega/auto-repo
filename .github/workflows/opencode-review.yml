@@ -31,10 +31,10 @@ jobs:
       pull-requests: write
       issues: read
     env:
-      REVIEW_DIR: .opencode/review
-      FIRST_PASS_FILE: .opencode/review/first-pass.md
-      FINAL_REVIEW_FILE: .opencode/review/final-review.md
-      FINAL_REVIEW_JSON: .opencode/review/final-review.json
+      REVIEW_DIR: ${{ runner.temp }}/opencode-review
+      FIRST_PASS_FILE: ${{ runner.temp }}/opencode-review/first-pass.md
+      FINAL_REVIEW_FILE: ${{ runner.temp }}/opencode-review/final-review.md
+      FINAL_REVIEW_JSON: ${{ runner.temp }}/opencode-review/final-review.json
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -48,6 +48,11 @@ jobs:
           mkdir -p "$HOME/.local/share/opencode"
           printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
           chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Prepare review workspace
         run: mkdir -p "$REVIEW_DIR"
