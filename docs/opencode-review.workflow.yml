@@ -1,0 +1,216 @@
+# Draft workflow kept outside `.github/workflows/` until workflow-file updates are allowed.
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Add OpenCode to PATH
+        run: echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Build PR review context
+        env:
+          PR_EVENT_JSON: ${{ toJson(github.event.pull_request) }}
+        run: |
+          mkdir -p review-artifacts
+          printf '%s\n' "$PR_EVENT_JSON" > review-artifacts/pr-event.json
+          gh pr view "$PR_NUMBER" --repo "$REPO" --json comments,commits,files,reviews > review-artifacts/pr-context.json
+          git fetch --no-tags origin "$PR_BASE_REF"
+          git log --no-merges --format='%H %s' "origin/$PR_BASE_REF..HEAD" > review-artifacts/commits.txt
+          git diff --name-status "origin/$PR_BASE_REF...HEAD" > review-artifacts/changed-files.txt
+          git diff --stat "origin/$PR_BASE_REF...HEAD" > review-artifacts/diffstat.txt
+          git diff --find-renames --find-copies "origin/$PR_BASE_REF...HEAD" > review-artifacts/diff.patch
+
+      - name: Run first review pass
+        run: |
+          cat <<'EOF' > review-artifacts/review-pass-1-prompt.txt
+          Review this pull request.
+          - Check for code quality issues
+          - Look for potential bugs
+          - Suggest improvements
+          - Detect modifications outside the intended PR scope
+          - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+          Infer the intended scope from the PR title, body, commit history, and changed files.
+          Use the attached PR metadata and diff files as the source of truth.
+
+          Return valid JSON only with this schema:
+          {
+            "overall": "issues" | "lgtm",
+            "summary": "short paragraph",
+            "findings": [
+              {
+                "severity": "high" | "medium" | "low",
+                "category": "bug" | "quality" | "improvement" | "scope",
+                "title": "short title",
+                "details": "concise explanation with file references when possible",
+                "source": "reviewer_one"
+              }
+            ],
+            "out_of_scope_changes": [
+              {
+                "title": "short title",
+                "details": "why the change appears out of scope",
+                "source": "reviewer_one"
+              }
+            ]
+          }
+
+          If there are no actionable findings, set "overall" to "lgtm" and keep both arrays empty.
+          EOF
+          opencode run \
+            --model github-copilot/gpt-5.4 \
+            --agent plan \
+            --format json \
+            --dir "$GITHUB_WORKSPACE" \
+            --file review-artifacts/pr-event.json \
+            --file review-artifacts/pr-context.json \
+            --file review-artifacts/commits.txt \
+            --file review-artifacts/changed-files.txt \
+            --file review-artifacts/diffstat.txt \
+            --file review-artifacts/diff.patch \
+            < review-artifacts/review-pass-1-prompt.txt \
+            > review-artifacts/review-pass-1.jsonl
+          jq -rs 'map(select(.type == "text") | .part.text) | last | fromjson' review-artifacts/review-pass-1.jsonl > review-artifacts/review-pass-1.json
+
+      - name: Run second review pass
+        run: |
+          cat <<'EOF' > review-artifacts/review-pass-2-prompt.txt
+          Review this pull request as the second reviewer.
+          - Check for code quality issues
+          - Look for potential bugs
+          - Suggest improvements
+          - Detect modifications outside the intended PR scope
+          - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+          The attached `review-pass-1.json` file contains the first reviewer's findings.
+          Produce the final combined review outcome after considering both that review and your own analysis.
+
+          Return valid JSON only with this schema:
+          {
+            "overall": "issues" | "lgtm",
+            "summary": "short paragraph",
+            "findings": [
+              {
+                "severity": "high" | "medium" | "low",
+                "category": "bug" | "quality" | "improvement" | "scope",
+                "title": "short title",
+                "details": "concise explanation with file references when possible",
+                "source": "reviewer_one" | "reviewer_two" | "both"
+              }
+            ],
+            "out_of_scope_changes": [
+              {
+                "title": "short title",
+                "details": "why the change appears out of scope",
+                "source": "reviewer_one" | "reviewer_two" | "both"
+              }
+            ]
+          }
+
+          Rules:
+          - If any actionable finding or out-of-scope change remains, set "overall" to "issues".
+          - If no actionable items remain, set "overall" to "lgtm" and keep both arrays empty.
+          - Be specific and do not duplicate equivalent findings.
+          EOF
+          opencode run \
+            --model github-copilot/claude-opus-4-6 \
+            --agent plan \
+            --format json \
+            --dir "$GITHUB_WORKSPACE" \
+            --file review-artifacts/pr-event.json \
+            --file review-artifacts/pr-context.json \
+            --file review-artifacts/commits.txt \
+            --file review-artifacts/changed-files.txt \
+            --file review-artifacts/diffstat.txt \
+            --file review-artifacts/diff.patch \
+            --file review-artifacts/review-pass-1.json \
+            < review-artifacts/review-pass-2-prompt.txt \
+            > review-artifacts/review-pass-2.jsonl
+          jq -rs 'map(select(.type == "text") | .part.text) | last | fromjson' review-artifacts/review-pass-2.jsonl > review-artifacts/final-review.json
+
+      - name: Post final combined review comment
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("review-artifacts/final-review.json").read_text())
+          summary = " ".join(str(data.get("summary", "")).split())
+          findings = data.get("findings") or []
+          out_of_scope = data.get("out_of_scope_changes") or []
+
+          lines = [
+              "## OpenCode review",
+              "",
+              "Combined assessment from `github-copilot/gpt-5.4` and `github-copilot/claude-opus-4-6`.",
+              "",
+          ]
+
+          if summary:
+              lines.extend([summary, ""])
+
+          if findings or out_of_scope or data.get("overall") == "issues":
+              if findings:
+                  lines.extend(["### Findings", ""])
+                  for item in findings:
+                      severity = str(item.get("severity", "unspecified")).upper()
+                      category = str(item.get("category", "note"))
+                      title = " ".join(str(item.get("title", "Untitled finding")).split())
+                      details = " ".join(str(item.get("details", "")).split())
+                      source = str(item.get("source", "")).strip()
+                      source_suffix = f" ({source})" if source else ""
+                      lines.append(f"- [{severity}] [{category}] {title}{source_suffix} - {details}")
+                  lines.append("")
+
+              if out_of_scope:
+                  lines.extend(["### Out-of-scope changes", ""])
+                  for item in out_of_scope:
+                      title = " ".join(str(item.get("title", "Untitled out-of-scope change")).split())
+                      details = " ".join(str(item.get("details", "")).split())
+                      source = str(item.get("source", "")).strip()
+                      source_suffix = f" ({source})" if source else ""
+                      lines.append(f"- {title}{source_suffix} - {details}")
+                  lines.append("")
+
+              lines.extend([
+                  "These items need follow-up before approval.",
+                  "",
+                  "/oc",
+              ])
+          else:
+              lines.append("LGTM. No actionable issues or out-of-scope changes found.")
+
+          Path("review-artifacts/final-comment.md").write_text("\n".join(lines).strip() + "\n")
+          PY
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file review-artifacts/final-comment.md
