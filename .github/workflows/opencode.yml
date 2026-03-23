@@ -52,7 +52,7 @@ jobs:
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
         with:
           model: github-copilot/gpt-5.4
           mentions: /coder
