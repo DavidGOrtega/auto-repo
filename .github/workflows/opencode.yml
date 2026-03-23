@@ -14,24 +14,21 @@ jobs:
       (
         github.event_name == 'issue_comment' &&
         (
-          contains(github.event.comment.body, '/oc') ||
-          contains(github.event.comment.body, '/opencode')
+          contains(github.event.comment.body, '/coder')
         ) &&
         contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
       ) ||
       (
         github.event_name == 'pull_request_review_comment' &&
         (
-          contains(github.event.comment.body, '/oc') ||
-          contains(github.event.comment.body, '/opencode')
+          contains(github.event.comment.body, '/coder')
         ) &&
         contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
       ) ||
       (
         github.event_name == 'pull_request_review' &&
         (
-          contains(github.event.review.body, '/oc') ||
-          contains(github.event.review.body, '/opencode')
+          contains(github.event.review.body, '/coder')
         ) &&
         contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)
       )
@@ -67,10 +64,5 @@ jobs:
         uses: anomalyco/opencode/github@latest
         with:
           model: github-copilot/gpt-5.4
-          prompt: |
-            When you need to open a new pull request, create it as a draft first and only mark it ready for review after the implementation is complete.
-            Once the work is finished and the branch is ready for review, explicitly move the pull request to ready-for-review status.
-            If this run starts from a pull request comment or review, stay on that pull request and update the same pull request instead of opening a new one.
-            If this run starts from an issue comment and there is already an open pull request linked to that issue, reuse the existing pull request instead of creating a new one.
-            Only open a new pull request when no suitable existing pull request is already linked to the requested work.
+          mentions: /coder
           use_github_token: true
