@@ -17,11 +17,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: read
-    env:
-      REVIEW_DIR: ${{ runner.temp }}/opencode-review
-      FIRST_PASS_FILE: ${{ runner.temp }}/opencode-review/first-pass.md
-      FINAL_REVIEW_FILE: ${{ runner.temp }}/opencode-review/final-review.md
-      FINAL_REVIEW_JSON: ${{ runner.temp }}/opencode-review/final-review.json
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -42,7 +37,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Prepare review workspace
-        run: mkdir -p "$REVIEW_DIR"
+        run: |
+          mkdir -p "$RUNNER_TEMP/opencode-review"
+          printf 'REVIEW_DIR=%s\n' "$RUNNER_TEMP/opencode-review" >> "$GITHUB_ENV"
+          printf 'FIRST_PASS_FILE=%s\n' "$RUNNER_TEMP/opencode-review/first-pass.md" >> "$GITHUB_ENV"
+          printf 'FINAL_REVIEW_FILE=%s\n' "$RUNNER_TEMP/opencode-review/final-review.md" >> "$GITHUB_ENV"
+          printf 'FINAL_REVIEW_JSON=%s\n' "$RUNNER_TEMP/opencode-review/final-review.json" >> "$GITHUB_ENV"
 
       - name: First review pass with GPT-5.4
         uses: anomalyco/opencode/github@latest
