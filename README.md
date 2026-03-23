@@ -15,7 +15,7 @@ This repository is the bootstrap source for that command.
 When you run `oc-init`, it:
 
 - resolves the target repo to the git root, even if you launch it from a nested folder
-- copies `AGENTS.md` and `.github/workflows/opencode.yml`
+- copies `AGENTS.md`, `opencode.json`, and `.github/workflows/opencode.yml`
 - optionally copies `.github/workflows/opencode-scheduled.yml` when you pass `--with-scheduled`
 - updates `.gitignore` by appending `.worktrees` only when that entry is missing
 - writes `*.oc-init-new` files instead of overwriting existing managed files, unless you pass `--force`
@@ -29,6 +29,7 @@ By default, existing repository content stays in place. `--force` only replaces 
 ## What it includes
 
 - `AGENTS.md` with repository workflow and contribution guidance for OpenCode sessions.
+- `opencode.json` with the `superpowers` OpenCode plugin enabled.
 - `.github/workflows/opencode.yml` to run OpenCode from issue comments and PR review activity.
 - `.github/workflows/opencode-scheduled.yml` to perform scheduled repository reviews.
 - `.gitignore` updated to include the local `.worktrees` convention used by the branching guide.
@@ -98,13 +99,14 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 
 1. From inside the target repo, run the remote `curl ... | bash` command, or use `./oc-init` from a local clone if you already have this repository checked out.
 2. Review any generated `*.oc-init-new` files and merge them with the target repository's existing files, or use `--force` when you explicitly want bootstrap-managed files replaced.
-3. Review `AGENTS.md` and adjust branch naming or review conventions if your team uses different defaults.
+3. Review `AGENTS.md` and `opencode.json`, and adjust branch naming, review conventions, or plugin configuration if your team uses different defaults.
 4. Commit the copied files in the target repository.
 5. Open an issue or PR comment with `/coder` to verify the workflow is active.
 
 ## Notes
 
 - The workflows use repository-scoped defaults and do not depend on a hardcoded repository name.
+- OpenCode reads the repository `opencode.json`, so the bundled `superpowers` plugin is available without modifying workflow files.
 - Git author configuration is handled inside the workflows so automation can create commits when needed.
 - `oc-init` configures the repository so GitHub Actions can create and approve pull requests.
 - OpenCode uses the default `GITHUB_TOKEN` by default, but if you need workflow-triggered PR creation or chained automation between workflows, a dedicated higher-privilege token may still be required.

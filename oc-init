@@ -222,6 +222,7 @@ ORIGIN_URL=$(git -C "$TARGET_REPO" remote get-url origin 2>/dev/null || true)
 REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 
 copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
+copy_file 'opencode.json' "$TARGET_REPO/opencode.json"
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
 
