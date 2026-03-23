@@ -226,7 +226,7 @@ REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
-copy_file '.github/workflows/issues-triage.yml' "$TARGET_REPO/.github/workflows/issues-triage.yml"
+copy_file 'docs/opencode-review.workflow.yml' "$TARGET_REPO/docs/opencode-review.workflow.yml"
 
 if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
   copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
