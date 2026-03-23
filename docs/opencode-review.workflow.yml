@@ -1,0 +1,182 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Capture PR context
+        run: |
+          gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" > pr.json
+          gh pr diff "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" > pr.diff
+
+      - name: Run first pass review
+        env:
+          OPENCODE_PERMISSION: '{ "bash": { "*": "deny", "gh*": "allow", "git diff*": "allow", "git show*": "allow", "git status*": "allow" } }'
+        run: |
+          cat > first-pass-prompt.txt <<'EOF'
+          Review this pull request:
+          - Check for code quality issues
+          - Look for potential bugs
+          - Suggest improvements
+          - Detect modifications outside the intended PR scope
+          - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+          Repository: ${{ github.repository }}
+          Pull request: #${{ github.event.pull_request.number }}
+          Title: ${{ github.event.pull_request.title }}
+
+          Use the checked out repository, the pull request metadata, and the PR diff to inspect the full change in context.
+
+          Return JSON only with this schema:
+          {
+            "summary": "short overall assessment",
+            "issues": [
+              {
+                "severity": "high|medium|low",
+                "category": "bug|quality|improvement|scope",
+                "path": "relative/path.ext or empty string",
+                "title": "short issue title",
+                "details": "why this matters",
+                "suggestion": "optional concrete fix suggestion or empty string"
+              }
+            ]
+          }
+
+          Rules:
+          - Report only real issues.
+          - Use an empty issues array when the pull request looks good.
+          - Include scope findings only when the change is genuinely outside the intended PR scope.
+          - Do not include markdown fences or explanatory text outside the JSON object.
+          EOF
+          opencode run -m github-copilot/gpt-5.4 "$(cat first-pass-prompt.txt)" > first-pass.json
+
+      - name: Normalize first pass output
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          path = pathlib.Path("first-pass.json")
+          text = path.read_text(encoding="utf-8").strip()
+          match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
+          if match:
+              text = match.group(1)
+          data = json.loads(text)
+          if not isinstance(data.get("issues"), list):
+              raise SystemExit("first pass missing issues array")
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Run second pass review
+        env:
+          OPENCODE_PERMISSION: '{ "bash": { "*": "deny", "gh*": "allow", "git diff*": "allow", "git show*": "allow", "git status*": "allow" } }'
+        run: |
+          {
+            cat <<'EOF'
+          You are the second reviewer for this pull request.
+
+          Review this pull request:
+          - Check for code quality issues
+          - Look for potential bugs
+          - Suggest improvements
+          - Detect modifications outside the intended PR scope
+          - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+          Repository: ${{ github.repository }}
+          Pull request: #${{ github.event.pull_request.number }}
+          Title: ${{ github.event.pull_request.title }}
+
+          First pass findings:
+          <first-pass>
+          EOF
+            cat first-pass.json
+            cat <<'EOF'
+          </first-pass>
+
+          Re-check the pull request yourself instead of only restating the first pass. Merge both reviewers into one final result.
+
+          Return JSON only with this schema:
+          {
+            "has_issues": true,
+            "summary": "short overall assessment",
+            "issues": [
+              {
+                "severity": "high|medium|low",
+                "category": "bug|quality|improvement|scope",
+                "path": "relative/path.ext or empty string",
+                "title": "short issue title",
+                "details": "why this matters",
+                "suggestion": "optional concrete fix suggestion or empty string"
+              }
+            ],
+            "review_body": "final markdown comment to post"
+          }
+
+          Review body rules:
+          - Start with "Needs changes." when has_issues is true or "LGTM." when has_issues is false.
+          - When has_issues is true, include a short bulleted list of the actionable findings and end with a blank line followed by "/oc".
+          - When has_issues is false, keep it brief, positive, and do not include "/oc".
+          - Mention out-of-scope modifications when present.
+          - Do not use markdown fences inside review_body.
+          - Do not include text outside the JSON object.
+          EOF
+          } > second-pass-prompt.txt
+          opencode run -m github-copilot/claude-opus-4-6 "$(cat second-pass-prompt.txt)" > final-review.json
+
+      - name: Prepare final comment
+        id: final-comment
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+
+          json_path = pathlib.Path("final-review.json")
+          text = json_path.read_text(encoding="utf-8").strip()
+          match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
+          if match:
+              text = match.group(1)
+          data = json.loads(text)
+          if not isinstance(data.get("issues"), list):
+              raise SystemExit("final review missing issues array")
+          if "review_body" not in data:
+              raise SystemExit("final review missing review_body")
+          json_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          pathlib.Path("final-review.md").write_text(data["review_body"].rstrip() + "\n", encoding="utf-8")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"has_issues={'true' if data['has_issues'] else 'false'}\n")
+          PY
+
+      - name: Post final combined review
+        run: gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body-file final-review.md
