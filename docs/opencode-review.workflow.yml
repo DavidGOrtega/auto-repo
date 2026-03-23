@@ -1,0 +1,115 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: read
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REVIEW_DIR: .opencode-review
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Prepare review workspace
+        run: mkdir -p "$REVIEW_DIR"
+
+      - name: First review pass with GPT-5.4
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: github-copilot/gpt-5.4
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
+            - Detect modifications outside the intended PR scope
+            - Explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+            Write the review to `.opencode-review/pass1.md`.
+
+            File requirements:
+            - Start with `# First Pass Review`
+            - Include a `## Verdict` section containing exactly one of: `changes_requested` or `lgtm`
+            - Include a `## Findings` section with concise bullets
+            - Include a `## Out-of-Scope Changes` section; write `- none` when nothing is out of scope
+            - Do not post a GitHub comment or review in this pass
+            - Do not modify any other files
+
+      - name: Capture first pass output
+        id: pass1
+        shell: bash
+        run: |
+          {
+            echo 'review<<EOF'
+            cat "$REVIEW_DIR/pass1.md"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Second review pass with Claude Opus 4.6
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: github-copilot/claude-opus-4-6
+          use_github_token: true
+          prompt: |
+            Review this pull request as the second reviewer.
+
+            Review criteria:
+            - code quality issues
+            - potential bugs
+            - suggested improvements
+            - modifications outside the intended PR scope
+            - changes that should not be allowed because they modify code outside the PR scope
+
+            Use the first pass review below as additional context, not as ground truth. Confirm, refine, or overturn findings based on the actual pull request diff.
+
+            First pass review:
+            ${{ steps.pass1.outputs.review }}
+
+            Write the final combined review to `.opencode-review/final.md`.
+
+            File requirements:
+            - The first line must be exactly `VERDICT: changes_requested` or `VERDICT: lgtm`
+            - After the first line, leave one blank line and then write the final GitHub comment in Markdown
+            - The comment must combine both review passes into one final outcome
+            - Include a short LGTM-style conclusion when the verdict is `lgtm`
+            - Include `/oc` on its own line at the end only when the verdict is `changes_requested`
+            - Do not include `/oc` when the verdict is `lgtm`
+            - Include any out-of-scope changes in a dedicated section; write `- none` when there are none
+            - Do not post a GitHub comment or review in this pass
+            - Do not modify any other files
+
+      - name: Publish combined review comment
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          review_path = Path('.opencode-review/final.md')
+          content = review_path.read_text()
+          first_line, _, body = content.partition('\n')
+
+          if first_line.strip() not in {
+              'VERDICT: changes_requested',
+              'VERDICT: lgtm',
+          }:
+              raise SystemExit('invalid verdict line in .opencode-review/final.md')
+
+          Path('.opencode-review/comment.md').write_text(body.lstrip('\n'))
+          PY
+
+          gh pr comment "$PR_NUMBER" --body-file "$REVIEW_DIR/comment.md"
