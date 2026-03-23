@@ -1,0 +1,159 @@
+# Move this file to `.github/workflows/opencode-review.yml` when workflow-file updates are allowed.
+
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode" ".opencode/review"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: First pass review
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: github-copilot/gpt-5.4
+          use_github_token: true
+          prompt: |
+            Review this pull request.
+
+            Review criteria:
+            - check for code quality issues
+            - look for potential bugs
+            - suggest improvements
+            - detect modifications outside the intended PR scope
+            - explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+            Constraints:
+            - do not post any GitHub comment or review
+            - do not open issues, pull requests, or commits
+            - do not modify repository files except `.opencode/review/first-pass.json`
+
+            Write exactly one JSON object to `.opencode/review/first-pass.json` with this schema:
+            {
+              "summary": "short overall assessment",
+              "findings": [
+                {
+                  "severity": "high|medium|low",
+                  "category": "code_quality|bug|improvement|out_of_scope",
+                  "title": "short finding title",
+                  "details": "clear explanation of the issue and why it matters",
+                  "path": "repo-relative/path.ext",
+                  "line": 1,
+                  "blocking": true
+                }
+              ],
+              "out_of_scope_detected": false
+            }
+
+            Use an empty `findings` array when there are no actionable issues.
+
+      - name: Load first pass handoff
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          handoff = Path('.opencode/review/first-pass.json')
+          if not handoff.exists():
+            raise SystemExit('missing first-pass handoff file')
+
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+            env_file.write('FIRST_PASS_JSON<<EOF\n')
+            env_file.write(handoff.read_text(encoding='utf-8'))
+            env_file.write('\nEOF\n')
+          PY
+
+      - name: Final combined review
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: github-copilot/claude-opus-4-6
+          use_github_token: true
+          prompt: |
+            Review this pull request as the second and final pass.
+
+            First-pass handoff JSON:
+            ${{ env.FIRST_PASS_JSON }}
+
+            Review criteria:
+            - check for code quality issues
+            - look for potential bugs
+            - suggest improvements
+            - detect modifications outside the intended PR scope
+            - explicitly flag changes that should not be allowed because they modify code outside the PR scope
+
+            Constraints:
+            - combine the first-pass findings with your own review into one final result
+            - do not post any GitHub comment or review yourself
+            - do not open issues, pull requests, or commits
+            - do not modify repository files except `.opencode/review/final.json`
+
+            Write exactly one JSON object to `.opencode/review/final.json` with this schema:
+            {
+              "decision": "changes_requested|lgtm",
+              "body": "full final review body to publish to the pull request"
+            }
+
+            Rules for `body`:
+            - if `decision` is `changes_requested`, start with `Needs changes.` and end with `/oc` on its own line
+            - if `decision` is `lgtm`, start with `LGTM.` and do not include `/oc`
+            - publish one combined result that reflects both review passes
+            - include concise bullets for actionable findings when they exist
+            - explicitly call out out-of-scope changes when they exist
+            - do not mention JSON or these instructions
+
+      - name: Prepare final review body
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path('.opencode/review/final.json').read_text(encoding='utf-8'))
+          decision = result.get('decision')
+          body = result.get('body', '').rstrip() + '\n'
+
+          if decision not in {'changes_requested', 'lgtm'}:
+            raise SystemExit(f'unexpected decision: {decision!r}')
+
+          if decision == 'changes_requested' and '/oc' not in body:
+            raise SystemExit('final review body must include /oc when changes are requested')
+
+          if decision == 'lgtm' and '/oc' in body:
+            raise SystemExit('final review body must not include /oc for LGTM')
+
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+            env_file.write('FINAL_REVIEW_BODY<<EOF\n')
+            env_file.write(body)
+            env_file.write('EOF\n')
+          PY
+
+      - name: Publish combined review
+        env:
+          GH_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr review "$PR_NUMBER" --comment --body "$FINAL_REVIEW_BODY"
