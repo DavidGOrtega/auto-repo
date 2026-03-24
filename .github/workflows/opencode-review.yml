@@ -15,8 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
-
+          fetch-depth: 1
+          
       - name: Restore OpenCode credentials
         env:
           OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
