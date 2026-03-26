@@ -44,7 +44,7 @@ Expected: current output shows generic copy behavior for both files and no `requ
 
 - [ ] **Step 4: Add the minimal prerequisite change**
 
-Update `oc-init` so `opencode` is required before repository configuration starts, alongside the existing `git` and `gh` requirements.
+Update `oc-init` so `opencode` is required before repository configuration starts, alongside the existing `git` and `gh` requirements. Also make the script order explicit: reconcile `AGENTS.md` and `opencode.json` successfully before any GitHub repository configuration side effects run.
 
 - [ ] **Step 5: Review the prerequisite diff**
 
@@ -95,7 +95,7 @@ Expected: the merged file contains one effective bootstrap plugin entry, not dup
 
 Add a helper in `oc-init` that:
 - reads the current target `AGENTS.md` and bootstrap `AGENTS.md`,
-- invokes `opencode` non-interactively with a reconciliation prompt, passing file content in and capturing reconciled Markdown out in a deterministic way,
+- invokes `opencode` non-interactively with a reconciliation prompt, passing file content in and capturing reconciled Markdown out from the final `text` event in the JSON stream,
 - writes the reconciled output to a temporary file first.
 
 Use the supported `opencode run` CLI path explicitly. The implementation should build a reconciliation prompt string, run `opencode run <prompt> --format json --dir <target-repo>`, and capture the final assistant text from the JSON event stream into a temporary file.
@@ -114,6 +114,8 @@ Reject reconciliation output when:
 - the file is empty or whitespace only,
 - the bootstrap-required guidance is missing, including the OpenCode/Superpowers policy shipped in the bootstrap `AGENTS.md`,
 - all repo-specific top-level content disappears even though the original file had meaningful content; for this check, repo-specific content means any top-level heading or section present in the target file that is not part of the bootstrap template.
+
+Treat a target `AGENTS.md` as a trivial placeholder only when it has no substantive top-level repo policy beyond a title or one short placeholder sentence.
 
 - [ ] **Step 4: Route `AGENTS.md` through the new helper**
 
