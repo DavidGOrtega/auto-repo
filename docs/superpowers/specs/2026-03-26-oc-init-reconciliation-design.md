@@ -41,9 +41,20 @@ If `opencode` is missing, `oc-init` must fail immediately with a clear error. Th
 Behavior:
 - If the file does not exist, write the bootstrap version directly.
 - If the file exists, parse both the target file and bootstrap file as JSON objects.
-- Merge them so that required bootstrap configuration is present while preserving unrelated existing target configuration.
-- Avoid duplicate plugin declarations or duplicate top-level values.
+- Merge them with deterministic rules:
+  - for top-level object keys present only in the target file, preserve them;
+  - for top-level object keys present only in the bootstrap file, add them;
+  - for object keys present in both files and whose values are both JSON objects, merge recursively with the same rules;
+  - for keys present in both files and whose values are arrays, preserve target order and append only bootstrap items that are not already present by exact JSON value;
+  - for keys present in both files and whose values are scalar values or mismatched JSON types, use the bootstrap value only when that key is required for bootstrap behavior, otherwise preserve the target value.
+- Required bootstrap keys must win when necessary to keep OpenCode and Superpowers bootstrap behavior active.
+- Avoid duplicate plugin declarations or duplicate array values.
 - Write the merged JSON back to `opencode.json`.
+
+Example intent:
+- existing repo-specific keys such as unrelated model settings should remain intact;
+- bootstrap plugin entries such as required Superpowers configuration must be present even if absent before;
+- duplicate plugin entries must collapse to one instance in the final file.
 
 This merge should be deterministic and should not rely on OpenCode.
 
@@ -87,6 +98,11 @@ Other managed bootstrap files can keep the existing copy-or-`*.oc-init-new` beha
 - bootstrap `opencode.json` cannot be parsed as JSON,
 - the merged JSON cannot be written back safely,
 - the reconciled `AGENTS.md` output is empty or invalid for replacement.
+
+For this design, `AGENTS.md` output is invalid if any of these checks fail:
+- the result is empty or only whitespace,
+- the result drops repository-specific content entirely instead of reconciling it,
+- the result no longer contains the required bootstrap guidance for OpenCode and Superpowers agent usage.
 
 The failure mode should be explicit and stop the bootstrap process before GitHub repository configuration proceeds further.
 
