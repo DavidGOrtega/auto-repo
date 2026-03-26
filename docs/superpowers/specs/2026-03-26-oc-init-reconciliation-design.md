@@ -38,6 +38,8 @@ If `opencode` is missing, `oc-init` must fail immediately with a clear error. Th
 
 `opencode.json` should be merged structurally as JSON.
 
+For this design, the bootstrap-required `opencode.json` state is the repository configuration that enables the bundled Superpowers plugin, including the plugin entry itself and any directly supporting keys shipped in the bootstrap file that are necessary for OpenCode to load that plugin.
+
 Behavior:
 - If the file does not exist, write the bootstrap version directly.
 - If the file exists, parse both the target file and bootstrap file as JSON objects.
@@ -62,6 +64,8 @@ This merge should be deterministic and should not rely on OpenCode.
 
 `AGENTS.md` should be reconciled through a local non-interactive OpenCode invocation.
 
+For this design, the bootstrap-required `AGENTS.md` guidance is the OpenCode and Superpowers policy shipped by the bootstrap template, including the agent usage expectations and review-format requirements that the bootstrap depends on.
+
 Behavior:
 - If the file does not exist, write the bootstrap version directly.
 - If the file exists, invoke `opencode` locally with:
@@ -83,6 +87,7 @@ For these two files, `oc-init` should stop producing `*.oc-init-new` merge copie
 
 - `AGENTS.md` should be overwritten with reconciled output.
 - `opencode.json` should be overwritten with merged output.
+- `--force` should not bypass reconciliation for these two files; they should still be reconciled and overwritten directly.
 
 If reconciliation fails for either file, `oc-init` should abort instead of falling back to side files.
 
@@ -101,8 +106,12 @@ Other managed bootstrap files can keep the existing copy-or-`*.oc-init-new` beha
 
 For this design, `AGENTS.md` output is invalid if any of these checks fail:
 - the result is empty or only whitespace,
-- the result drops repository-specific content entirely instead of reconciling it,
+- the result drops all existing top-level repo-specific sections instead of reconciling them,
 - the result no longer contains the required bootstrap guidance for OpenCode and Superpowers agent usage.
+
+The minimum acceptance rule is:
+- keep at least one pre-existing repo-specific heading or section when the original file had one, unless the original file was only a trivial placeholder;
+- retain the bootstrap-required OpenCode and Superpowers sections in the final file.
 
 The failure mode should be explicit and stop the bootstrap process before GitHub repository configuration proceeds further.
 
