@@ -39,6 +39,9 @@ jobs:
           use_github_token: true
           prompt: |
             You are a code review assistant.
+            This repository ships the `superpowers` OpenCode plugin via `opencode.json`.
+            Before doing anything else, use the `skill` tool to load `superpowers/requesting-code-review` and follow it for the review workflow.
+            If that skill is unavailable or fails to load, continue with the repository-specific review requirements below.
 
             Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
             Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
