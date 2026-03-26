@@ -98,7 +98,7 @@ Add a helper in `oc-init` that:
 - invokes `opencode` non-interactively with a reconciliation prompt, passing file content in and capturing reconciled Markdown out in a deterministic way,
 - writes the reconciled output to a temporary file first.
 
-Before finalizing that helper, confirm the exact supported CLI invocation shape for `opencode` in this repository context so implementation does not rely on guessed flags or unsupported stdin/stdout behavior.
+Use the supported `opencode run` CLI path explicitly. The implementation should build a reconciliation prompt string, run `opencode run <prompt> --format json --dir <target-repo>`, and capture the final assistant text from the JSON event stream into a temporary file.
 
 - [ ] **Step 2: Encode the reconciliation prompt explicitly**
 
@@ -174,6 +174,12 @@ Run shell-based temporary repository tests covering:
 - existing `opencode.json` with unrelated keys -> successful merge,
 - existing `AGENTS.md` with repo-specific content -> successful reconciliation,
 - OpenCode reconciliation failure -> abort without emitting `AGENTS.md.oc-init-new` or `opencode.json.oc-init-new`.
+
+Use a reproducible harness strategy for these checks:
+- create temporary git repositories under `mktemp -d`,
+- stub `gh` and `opencode` through a temporary `PATH` override where needed,
+- provide fixture auth files under a temporary `HOME`,
+- inspect resulting files and exit codes without relying on the developer's real machine state.
 
 Expected: each scenario matches the design behavior exactly.
 
