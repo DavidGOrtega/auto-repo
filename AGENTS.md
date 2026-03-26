@@ -28,18 +28,28 @@ before starting any work, you MUST verify your current environment:
        git worktree add ./.worktrees/<branch_name> -b <branch_name>
       ```
     - **Switch Directory:** Change your working directory to the newly created path and perform all operations from there.
-  4. **Update from origin before your final push when working locally** Before the final push from a local worktree, pull the latest remote state into your branch with `git pull origin <current-branch>` and resolve conflicts manually if they appear.
-  5. **Pull the default branch to include latest changes** Once the branch is pushed, bring in the current default branch changes with `git pull origin <default-branch>`. If conflicts appear, resolve them manually, complete the merge, and continue from that merged history. Never use rebase or anything that rewrites the git history.
+  4. **Pull the default branch to include latest changes** Before considering local work complete, bring the current default branch into the working branch with `git pull origin <default-branch>`. If conflicts appear, resolve them manually, complete the merge, and continue from that merged history. Never use rebase or anything that rewrites the git history.
+  5. **Reconcile the working branch before the final push when working locally** After pulling the default branch and before the final push from a local worktree, pull the latest remote state into the current working branch with `git pull origin <current-branch>` and resolve conflicts manually if they appear.
 
 ### Pull Conflict Handling
 
 When a working branch needs the latest `master` or `main`, prefer an explicit `git pull origin <default-branch>` so it is clear that the branch is incorporating the remote default branch and may require conflict resolution.
 
-- Before the final push from a local environment, also pull `origin/<current-branch>` into the working branch so remote updates are reconciled locally first.
+- In local development, treat `git pull origin <default-branch>` as the required integration step before the work is considered complete.
+- After that integration step and before the final push, also pull `origin/<current-branch>` into the working branch so remote updates are reconciled locally too.
 - Treat this as a merge-based update to the current branch.
 - If conflicts occur, resolve them manually, stage the resolved files, and complete the merge commit.
 - Do not replace this flow with rebase or other history-rewriting commands.
 - If you describe the update in logs or comments, say plainly that you pulled the default branch and resolved conflicts.
+
+### Superpowers Agent Rules
+
+This repository uses Superpowers for agent-driven work. Agents must use the relevant Superpowers skill flow for the task they are performing instead of improvising repository policy on their own.
+
+- PR review agents must use Superpowers and follow the repository review format.
+- Reviewer approvals and change requests must start with `# REVIEW <sha>` where `<sha>` is the commit under review.
+- Approval reviews must stay concise, avoid cosmetic notes that do not require action, and end with `LGTM`.
+- Requested-change reviews must use a short enumerated list and end with `/coder fix this`.
 
 ### Pull Request Summary
 

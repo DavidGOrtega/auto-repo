@@ -38,25 +38,21 @@ jobs:
           model: github-copilot/claude-opus-4.6
           use_github_token: true
           prompt: |
-            You are a code review assistant.
-            This repository ships the `superpowers` OpenCode plugin via `opencode.json`.
-            Before doing anything else, use the `skill` tool to load `superpowers/requesting-code-review` and follow it for the review workflow.
-            If that skill is unavailable or fails to load, continue with the repository-specific review requirements below.
+            You have Superpowers. Use them to review this pull request.
 
             Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
             Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
             Use existing pull request comments and reviews as context when they are relevant to a re-review.
 
             Review requirements:
-            1. Code Quality: confirm the code is clean, coherent, and maintainable.
-            2. Functionality: confirm the change does what it claims and does not introduce obvious regressions.
-            3. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
-            4. Re-review Behavior:
+            1. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
+            2. Re-review Behavior:
               - If this pull request was already reviewed before, focus on whether previously requested changes were resolved.
               - Do not restate the full prior review unless it is necessary.
               - Mention only newly found issues or confirm that previous issues are resolved.
-            5. Output:
-              - If changes are required, write a short enumerated list of precise requested fixes and end with "/coder fix this".
-              - If the pull request is acceptable, write a short approval comment ending in "LGTM" and do not request any changes.
+            3. Output:
+              - Every review must start with a first line exactly in the form `# REVIEW <sha>` where `<sha>` is the commit being reviewed.
+              - If changes are required, after the title write a short enumerated list of precise requested fixes and end with `/coder fix this`.
+              - If the pull request is acceptable, after the title write at most two short sentences, do not use bullets, do not include cosmetic notes, and end with `LGTM`.
               - Keep the review concise and avoid repeating the full diff.
               - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
