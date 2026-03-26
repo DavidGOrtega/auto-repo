@@ -38,6 +38,11 @@ jobs:
           use_github_token: true
           prompt: |
             Review the codebase for bugs, broken behavior, missing error handling, and TODO comments.
+            First, review existing open issues and conservatively close only those that are clearly obsolete, duplicate, or already fixed based on the current repository state and relevant GitHub metadata.
+            When closing an issue, leave a short technical explanation with 1-2 evidence points and reference the matching issue, PR, commit, file, or workflow when available.
+            If the evidence is incomplete or ambiguous, do not close the issue.
+            Do not close issues only because they are old.
+            Do not close feature requests that are still simply unimplemented.
             Before opening any new issue, review existing open issues and recently closed issues to avoid duplicates.
             If an equivalent issue already exists, do not open a new one.
             If you find work worth tracking and no equivalent issue exists, open GitHub issues with clear titles and concise technical descriptions.
