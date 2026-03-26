@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
-  review:
+  reviewer:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -15,8 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
-
+          fetch-depth: 1
+          token: ${{ secrets.MASTER_GITHUB_TOKEN }}
+          
       - name: Restore OpenCode credentials
         env:
           OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
@@ -42,11 +43,20 @@ jobs:
             Before doing anything else, use the `skill` tool to load `superpowers/requesting-code-review` and follow it for the review workflow.
             If that skill is unavailable or fails to load, continue with the repository-specific review requirements below.
 
-            Review only the pull request diff and apply these requirements:
-            1. Code Quality: confirm the code is clean and well-structured.
-            2. Functionality: confirm the code works as intended and meets the requirements.
-            3. Scope Control: reject modifications outside the pull request scope and ask for follow-up issues instead.
-            4. Review Output:
-              - If the code needs changes, write a precise enumerated list of every requested change and end the review with `/coder fix this`.
-              - If the code does not need changes, say `LGTM` and do not request changes.
-              - If you have already reviewed the pull request 5 times or more, stop and defer to another peer reviewer without asking for more changes.
+            Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
+            Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
+            Use existing pull request comments and reviews as context when they are relevant to a re-review.
+
+            Review requirements:
+            1. Code Quality: confirm the code is clean, coherent, and maintainable.
+            2. Functionality: confirm the change does what it claims and does not introduce obvious regressions.
+            3. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
+            4. Re-review Behavior:
+              - If this pull request was already reviewed before, focus on whether previously requested changes were resolved.
+              - Do not restate the full prior review unless it is necessary.
+              - Mention only newly found issues or confirm that previous issues are resolved.
+            5. Output:
+              - If changes are required, write a short enumerated list of precise requested fixes and end with "/coder fix this".
+              - If the pull request is acceptable, write a short approval comment ending in "LGTM" and do not request any changes.
+              - Keep the review concise and avoid repeating the full diff.
+              - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
