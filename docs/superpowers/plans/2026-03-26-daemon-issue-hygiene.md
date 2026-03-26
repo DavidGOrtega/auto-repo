@@ -32,7 +32,10 @@ Create a short checklist in your notes that the new prompt must satisfy and that
 - closes clearly obsolete, duplicate, or already fixed open issues first
 - requires clear evidence before closing
 - requires a short technical explanation when closing
+- requires closure comments to cite 1-2 evidence points and reference the matching issue, PR, commit, file, or workflow when available
 - avoids closing uncertain or merely old issues
+- leaves unimplemented feature requests open
+- leaves reports open when repository state cannot confirm or refute them
 - removes any triage language
 
 - [ ] **Step 3: Verify the current workflow fails that checklist**
@@ -46,7 +49,10 @@ Edit `.github/workflows/opencode-scheduled.yml` so the prompt tells the daemon t
 - inspect open issues first
 - close only clearly obsolete, duplicate, or already fixed issues
 - leave a concise technical explanation when closing
+- cite the evidence used and point to the matching issue, PR, commit, file, or workflow when available
 - prefer no action when uncertain
+- keep unimplemented feature requests open
+- keep issues open when repository state is inconclusive
 - review current and recently closed issues before opening anything new
 - open new issues only after the hygiene pass
 
@@ -95,7 +101,17 @@ Expected: `YAML OK`
 Run: `git diff -- .github/workflows/opencode-scheduled.yml .github/workflows/issues-triage.yml`
 Expected: one prompt update and one deleted workflow, with no unrelated changes.
 
-- [ ] **Step 4: Commit the workflow cleanup**
+- [ ] **Step 4: Review the final prompt against the spec scenarios**
+
+Check that the updated prompt clearly covers these cases before committing:
+- closes issues for removed workflows with evidence
+- closes duplicates with a reference to the canonical issue or fix
+- closes already-fixed issues with repository evidence
+- leaves old but still plausible issues open
+- leaves unimplemented feature requests open
+- removes all triage concepts
+
+- [ ] **Step 5: Commit the workflow cleanup**
 
 ```bash
 git add .github/workflows/opencode-scheduled.yml .github/workflows/issues-triage.yml
