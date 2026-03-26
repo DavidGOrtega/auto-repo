@@ -15,13 +15,13 @@ This enhancement must stay conservative: it should reduce obvious issue tracker 
 
 ## Proposed Behavior
 
-On each scheduled run, the daemon should perform two lightweight passes:
+On each scheduled run, the daemon should perform two lightweight passes in this order:
 
-1. Review the current repository state for new bugs, broken behavior, missing error handling, and actionable TODOs, then open issues only when no equivalent issue already exists.
-2. Review existing open issues and close only those that have strong, current evidence showing they are:
+1. Review existing open issues and close only those that have strong, current evidence showing they are:
    - obsolete,
    - duplicates of another active or resolved issue, or
    - already fixed in the repository.
+2. Review the current repository state for new bugs, broken behavior, missing error handling, and actionable TODOs, then open issues only when no equivalent issue already exists.
 
 The daemon should prefer no action over uncertain action. If evidence is incomplete or ambiguous, the issue remains open.
 
@@ -35,7 +35,7 @@ An open issue may be closed only when at least one of these conditions is clearl
 - `Duplicate`: the issue is substantively covered by another issue or merged fix, with clear overlap in scope and expected resolution.
 - `Already fixed`: the reported problem is demonstrably resolved by the current codebase, configuration, or merged changes.
 
-Evidence should come from the current repository state, such as:
+Evidence may come from the checked-out repository state and GitHub metadata that reflects merged or resolved work, such as:
 
 - relevant files or workflow definitions,
 - merged PRs or commits,
@@ -63,7 +63,7 @@ Recommended closure comment shape:
 - Update the scheduled daemon design so issue review includes both:
   - duplicate prevention before opening new issues, and
   - conservative hygiene review of existing open issues.
-- Remove the legacy `.github/workflows/issues-triage.yml` workflow from the intended workflow model.
+- Delete the legacy `.github/workflows/issues-triage.yml` workflow from the repository.
 - Ensure no part of the daemon behavior depends on adding, removing, or routing through a `triage` label.
 - Keep permissions focused on what the daemon already needs for issue and repository interaction.
 
