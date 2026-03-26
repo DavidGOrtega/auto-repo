@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Update `AGENTS.md` and the reviewer workflow so Superpowers usage and local pull rules are defined centrally and the review prompt stays short.
+**Goal:** Update `AGENTS.md` and the reviewer workflow so Superpowers usage and local pull rules are defined centrally, and reviewer output uses a strict `# REVIEW <sha>` title format.
 
-**Architecture:** The repo policy moves into `AGENTS.md`, where agent classes, Superpowers usage, and local git merge requirements are documented. The review workflow then references that policy with a short Superpowers instruction plus only the repo-specific review output rules.
+**Architecture:** The repo policy moves into `AGENTS.md`, where agent classes, Superpowers usage, local git merge requirements, and the required reviewer output format are documented. The review workflow then references that policy with a short Superpowers instruction plus only the repo-specific review output rules, including the forced `# REVIEW <sha>` heading.
 
 **Tech Stack:** Markdown, GitHub Actions YAML
 
@@ -12,8 +12,8 @@
 
 ## File Structure
 
-- Modify: `AGENTS.md` - add Superpowers agent rules and clarify that `git pull origin <default-branch>` is the required local integration step, while `git pull origin <current-branch>` is only a pre-push reconciliation step.
-- Modify: `.github/workflows/opencode-review.yml` - replace the long Superpowers explanation with a concise instruction and keep only review-scope/output rules.
+- Modify: `AGENTS.md` - add Superpowers agent rules, clarify that `git pull origin <default-branch>` is the required local integration step, define `git pull origin <current-branch>` as only a pre-push reconciliation step, and document the required reviewer heading format.
+- Modify: `.github/workflows/opencode-review.yml` - replace the long Superpowers explanation with a concise instruction and keep only review-scope/output rules, including the forced `# REVIEW <sha>` heading.
 
 ### Task 1: Update repo policy in AGENTS.md
 
@@ -31,6 +31,7 @@ Confirm the current file does not yet clearly state:
 - PR reviewers should use Superpowers
 - `git pull origin <default-branch>` is the required local integration step
 - `git pull origin <current-branch>` is additional pre-push reconciliation, not the main rule
+- reviewer output must begin with `# REVIEW <sha>`
 
 - [ ] **Step 3: Add the minimal AGENTS.md policy update**
 
@@ -38,6 +39,7 @@ Edit `AGENTS.md` to:
 - add a short section describing Superpowers agent expectations across the repo
 - explicitly mention PR review agents
 - clarify the local git rule hierarchy around default-branch pull versus current-branch reconciliation
+- define the reviewer title format as `# REVIEW <sha>` and distinguish short approval output from change requests
 
 - [ ] **Step 4: Review the AGENTS.md diff**
 
@@ -61,13 +63,13 @@ Keep the repo-specific rules for:
 - reviewing only the current PR diff
 - staying in scope
 - using prior review context on re-review
-- output format for requested changes versus `LGTM`
+- output format for requested changes versus `LGTM`, always starting with `# REVIEW <sha>`
 - review-round limit
 
 - [ ] **Step 3: Review the workflow diff**
 
 Run: `git diff -- .github/workflows/opencode-review.yml`
-Expected: the prompt is shorter, keeps the repo-specific review rules, and no longer repeats the long Superpowers explanation.
+Expected: the prompt is shorter, keeps the repo-specific review rules, forces the `# REVIEW <sha>` heading, and no longer repeats the long Superpowers explanation.
 
 ### Task 3: Validate and commit the expanded PR changes
 
