@@ -67,7 +67,7 @@ Add a focused helper in `oc-init` that:
 
 - [ ] **Step 2: Define bootstrap-required JSON keys in one place**
 
-Introduce a single source of truth in `oc-init` for the bootstrap-required `opencode.json` keys so the merge remains deterministic. Derive this set from the bootstrap `opencode.json` file itself, limited to the keys required to keep the bundled Superpowers plugin active.
+Introduce a single source of truth in `oc-init` for the bootstrap-required `opencode.json` keys so the merge remains deterministic. Add an explicit step in code or comments that documents the exact key set taken from the bootstrap `opencode.json`, limited to the keys required to keep the bundled Superpowers plugin active.
 
 - [ ] **Step 3: Route `opencode.json` through the new helper**
 
@@ -98,6 +98,8 @@ Add a helper in `oc-init` that:
 - invokes `opencode` non-interactively with a reconciliation prompt, passing file content in and capturing reconciled Markdown out in a deterministic way,
 - writes the reconciled output to a temporary file first.
 
+Before finalizing that helper, confirm the exact supported CLI invocation shape for `opencode` in this repository context so implementation does not rely on guessed flags or unsupported stdin/stdout behavior.
+
 - [ ] **Step 2: Encode the reconciliation prompt explicitly**
 
 The prompt must instruct OpenCode to:
@@ -111,7 +113,7 @@ The prompt must instruct OpenCode to:
 Reject reconciliation output when:
 - the file is empty or whitespace only,
 - the bootstrap-required guidance is missing, including the OpenCode/Superpowers policy shipped in the bootstrap `AGENTS.md`,
-- all repo-specific top-level content disappears even though the original file had meaningful content.
+- all repo-specific top-level content disappears even though the original file had meaningful content; for this check, repo-specific content means any top-level heading or section present in the target file that is not part of the bootstrap template.
 
 - [ ] **Step 4: Route `AGENTS.md` through the new helper**
 
@@ -167,6 +169,7 @@ Expected: no output
 Run shell-based temporary repository tests covering:
 - clean repo with no `AGENTS.md` or `opencode.json` -> both files written directly,
 - missing `opencode` binary -> clear failure,
+- malformed bootstrap `opencode.json` -> clear failure,
 - malformed existing `opencode.json` -> clear failure,
 - existing `opencode.json` with unrelated keys -> successful merge,
 - existing `AGENTS.md` with repo-specific content -> successful reconciliation,
