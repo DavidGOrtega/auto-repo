@@ -47,6 +47,14 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 is required"
 }
 
+require_prerequisites() {
+  require_command git
+  require_command gh
+  require_command opencode
+}
+
+require_command git
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --with-scheduled)
@@ -190,10 +198,16 @@ copy_file() {
   printf 'copied: %s\n' "$target_path"
 }
 
+install_prerequisite_bootstrap_files() {
+  # Keep these ahead of GitHub configuration so future reconciliation
+  # failures stop before repository-side changes run.
+  copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
+  copy_file 'opencode.json' "$TARGET_REPO/opencode.json"
+}
+
 configure_github_repo() {
   local repo_slug=$1
 
-  require_command gh
   gh auth status >/dev/null 2>&1 || fail 'gh must already be authenticated'
   [ -f "$OPENCODE_AUTH_PATH" ] || fail "missing OpenCode auth file: $OPENCODE_AUTH_PATH"
 
@@ -216,13 +230,12 @@ configure_github_repo() {
   printf 'configured: repository merge settings\n'
 }
 
-require_command git
+require_prerequisites
 ORIGIN_URL=$(git -C "$TARGET_REPO" remote get-url origin 2>/dev/null || true)
 [ -n "$ORIGIN_URL" ] || fail 'target repository must have an origin remote'
 REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 
-copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
-copy_file 'opencode.json' "$TARGET_REPO/opencode.json"
+install_prerequisite_bootstrap_files
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
 
