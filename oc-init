@@ -273,7 +273,10 @@ target = {} if not target_path.exists() else load_json(sys.argv[2])
 merged = merge_json(bootstrap, target)
 for key in required_keys:
     if key in bootstrap:
-        merged[key] = bootstrap[key]
+        if key in target:
+            merged[key] = merge_json(bootstrap[key], target[key])
+        else:
+            merged[key] = bootstrap[key]
 
 output_path.write_text(json.dumps(merged, indent=2) + "\n")
 PY
