@@ -53,8 +53,6 @@ require_prerequisites() {
   require_command opencode
 }
 
-require_command git
-
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --with-scheduled)
@@ -84,6 +82,8 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+require_prerequisites
 
 [ -n "$TARGET_REPO" ] || TARGET_REPO=$(git rev-parse --show-toplevel 2>/dev/null || true)
 
@@ -230,7 +230,6 @@ configure_github_repo() {
   printf 'configured: repository merge settings\n'
 }
 
-require_prerequisites
 ORIGIN_URL=$(git -C "$TARGET_REPO" remote get-url origin 2>/dev/null || true)
 [ -n "$ORIGIN_URL" ] || fail 'target repository must have an origin remote'
 REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
