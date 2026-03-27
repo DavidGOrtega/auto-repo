@@ -54,6 +54,7 @@ require_prerequisites() {
   require_command git
   require_command gh
   require_command opencode
+  require_command python3
 }
 
 while [ "$#" -gt 0 ]; do
