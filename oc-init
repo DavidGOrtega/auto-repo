@@ -246,6 +246,14 @@ def dedupe_array(values):
     return merged
 
 
+def normalize_required_value(value):
+    if isinstance(value, list):
+        return dedupe_array(value)
+    if isinstance(value, dict):
+        return {key: normalize_required_value(child) for key, child in value.items()}
+    return value
+
+
 def merge_json(bootstrap_value, target_value):
     if isinstance(bootstrap_value, dict) and isinstance(target_value, dict):
         merged = {}
@@ -273,10 +281,10 @@ target = {} if not target_path.exists() else load_json(sys.argv[2])
 merged = merge_json(bootstrap, target)
 for key in required_keys:
     if key in bootstrap:
-        if key in target:
+        if key in target and isinstance(bootstrap[key], type(target[key])):
             merged[key] = merge_json(bootstrap[key], target[key])
         else:
-            merged[key] = bootstrap[key]
+            merged[key] = normalize_required_value(bootstrap[key])
 
 output_path.write_text(json.dumps(merged, indent=2) + "\n")
 PY
