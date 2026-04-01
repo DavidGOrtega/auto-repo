@@ -102,7 +102,7 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 2. Review the reconciled `AGENTS.md` and merged `opencode.json` in git diff, and review any generated `*.oc-init-new` files for the remaining managed files.
 3. Adjust branch naming, review conventions, or plugin configuration if your team uses different defaults.
 4. Commit the resulting files in the target repository.
-5. Open an issue or PR comment with `/coder` to verify the workflow is active.
+5. Open an issue or PR comment with `/coder`, or open a PR comment with `/reviewer`, to verify the workflows are active.
 
 ## Notes
 

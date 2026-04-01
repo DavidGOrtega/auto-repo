@@ -3,9 +3,19 @@ name: opencode-review
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
 
 jobs:
   reviewer:
+    if: |
+      github.event_name == 'pull_request' ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '/reviewer') &&
+        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      )
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -13,12 +23,29 @@ jobs:
       pull-requests: read
       issues: read
     steps:
+      - name: Check PR source repository
+        if: github.event_name == 'issue_comment'
+        id: pr_source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          same_repo=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }} --jq '.head.repo.full_name == .base.repo.full_name')
+          printf 'same_repo=%s\n' "$same_repo" >> "$GITHUB_OUTPUT"
+
+      - name: Reject fork PR reviewer commands
+        if: github.event_name == 'issue_comment' && steps.pr_source.outputs.same_repo != 'true'
+        run: |
+          printf '%s\n' 'Manual /reviewer is only supported for pull requests from branches in this repository.' >&2
+          exit 1
+
       - uses: actions/checkout@v6
+        if: github.event_name != 'issue_comment' || steps.pr_source.outputs.same_repo == 'true'
         with:
           fetch-depth: 1
           token: ${{ secrets.MASTER_GITHUB_TOKEN }}
           
       - name: Restore OpenCode credentials
+        if: github.event_name != 'issue_comment' || steps.pr_source.outputs.same_repo == 'true'
         env:
           OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
         run: |
@@ -27,15 +54,18 @@ jobs:
           chmod 600 "$HOME/.local/share/opencode/auth.json"
 
       - name: Configure git author
+        if: github.event_name != 'issue_comment' || steps.pr_source.outputs.same_repo == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - uses: anomalyco/opencode/github@latest
+        if: github.event_name != 'issue_comment' || steps.pr_source.outputs.same_repo == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
         with:
           model: github-copilot/claude-opus-4.6
+          mentions: /reviewer
           use_github_token: true
           prompt: |
             You have Superpowers. Use them to review this pull request.
