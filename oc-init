@@ -5,6 +5,9 @@ set -euo pipefail
 DEFAULT_SOURCE_BASE_URL='https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master'
 WORKTREE_IGNORE_ENTRY='.worktrees'
 OPENCODE_AUTH_PATH=${HOME}/.local/share/opencode/auth.json
+# Keep the bundled Superpowers plugin active by enforcing only the bootstrap
+# keys that OpenCode needs for plugin loading.
+OPENCODE_BOOTSTRAP_REQUIRED_KEYS='["plugin"]'
 
 usage() {
   cat <<'EOF'
@@ -47,6 +50,13 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 is required"
 }
 
+require_prerequisites() {
+  require_command git
+  require_command gh
+  require_command opencode
+  require_command python3
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --with-scheduled)
@@ -76,6 +86,8 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+require_prerequisites
 
 [ -n "$TARGET_REPO" ] || TARGET_REPO=$(git rev-parse --show-toplevel 2>/dev/null || true)
 
@@ -190,10 +202,321 @@ copy_file() {
   printf 'copied: %s\n' "$target_path"
 }
 
+merge_opencode_json() {
+  local target_path=$1
+  local source_path
+  local merged_path="$TEMP_DIR/opencode.json.merged"
+  local existed_before='false'
+
+  source_path=$(resolve_source_path 'opencode.json')
+
+  mkdir -p -- "$(dirname -- "$target_path")"
+
+  if [ -e "$target_path" ]; then
+    existed_before='true'
+  fi
+
+  python3 - "$source_path" "$target_path" "$merged_path" "$OPENCODE_BOOTSTRAP_REQUIRED_KEYS" <<'PY' || fail "failed to reconcile $target_path"
+import json
+import sys
+from pathlib import Path
+
+
+def load_json(path_str: str):
+    path = Path(path_str)
+    try:
+        data = json.loads(path.read_text())
+    except FileNotFoundError:
+        raise SystemExit(f"missing JSON file: {path}")
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"malformed JSON in {path}: {exc.msg} at line {exc.lineno} column {exc.colno}")
+    if not isinstance(data, dict):
+        raise SystemExit(f"JSON root must be an object: {path}")
+    return data
+
+
+def dedupe_array(values):
+    seen = set()
+    merged = []
+    for value in values:
+        key = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(value)
+    return merged
+
+
+def normalize_required_value(value):
+    if isinstance(value, list):
+        return dedupe_array(value)
+    if isinstance(value, dict):
+        return {key: normalize_required_value(child) for key, child in value.items()}
+    return value
+
+
+def merge_json(bootstrap_value, target_value):
+    if isinstance(bootstrap_value, dict) and isinstance(target_value, dict):
+        merged = {}
+        for key in target_value:
+            if key in bootstrap_value:
+                merged[key] = merge_json(bootstrap_value[key], target_value[key])
+            else:
+                merged[key] = target_value[key]
+        for key in bootstrap_value:
+            if key not in merged:
+                merged[key] = bootstrap_value[key]
+        return merged
+    if isinstance(bootstrap_value, list) and isinstance(target_value, list):
+        return dedupe_array(target_value + bootstrap_value)
+    return target_value
+
+
+bootstrap = load_json(sys.argv[1])
+target_path = Path(sys.argv[2])
+output_path = Path(sys.argv[3])
+required_keys = json.loads(sys.argv[4])
+
+target = {} if not target_path.exists() else load_json(sys.argv[2])
+
+merged = merge_json(bootstrap, target)
+for key in required_keys:
+    if key in bootstrap:
+        if key in target and isinstance(bootstrap[key], type(target[key])):
+            merged[key] = merge_json(bootstrap[key], target[key])
+        else:
+            merged[key] = normalize_required_value(bootstrap[key])
+
+output_path.write_text(json.dumps(merged, indent=2) + "\n")
+PY
+
+  mv -- "$merged_path" "$target_path"
+  if [ "$existed_before" = 'true' ]; then
+    printf 'reconciled: %s\n' "$target_path"
+  else
+    printf 'copied: %s\n' "$target_path"
+  fi
+}
+
+reconcile_agents_md() {
+  local target_path=$1
+  local source_path
+  local reconciled_path="$TEMP_DIR/AGENTS.md.reconciled"
+  local existed_before='false'
+
+  source_path=$(resolve_source_path 'AGENTS.md')
+
+  mkdir -p -- "$(dirname -- "$target_path")"
+
+  if [ -e "$target_path" ]; then
+    existed_before='true'
+  fi
+
+  if [ "$existed_before" != 'true' ]; then
+    cp -- "$source_path" "$target_path"
+    printf 'copied: %s\n' "$target_path"
+    return
+  fi
+
+  python3 - "$source_path" "$target_path" "$reconciled_path" "$TARGET_REPO" <<'PY' || fail "failed to reconcile $target_path"
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+PLACEHOLDER_PATTERNS = (
+    "todo",
+    "tbd",
+    "placeholder",
+    "replace this",
+    "add repo guidance",
+    "customize this",
+    "fill in",
+    "coming soon",
+)
+REQUIRED_BOOTSTRAP_MARKERS = (
+    "### Superpowers Agent Rules",
+    "This repository uses Superpowers for agent-driven work.",
+    "Agents must use the relevant Superpowers skill flow",
+    "# REVIEW <sha>",
+    "LGTM",
+    "/coder fix this",
+)
+
+
+def read_text(path_str: str) -> str:
+    path = Path(path_str)
+    try:
+        return path.read_text()
+    except FileNotFoundError:
+        raise SystemExit(f"missing file: {path}")
+
+
+def normalize_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def parse_top_level_sections(text: str):
+    sections = []
+    current_heading = None
+    current_lines = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if current_heading is not None:
+                sections.append((current_heading, "\n".join(current_lines).strip()))
+            current_heading = line.strip()
+            current_lines = []
+            continue
+        if current_heading is not None:
+            current_lines.append(line)
+    if current_heading is not None:
+        sections.append((current_heading, "\n".join(current_lines).strip()))
+    return sections
+
+
+def has_placeholder_body(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in PLACEHOLDER_PATTERNS)
+
+
+def meaningful_repo_specific_sections(target_text: str, bootstrap_text: str):
+    bootstrap_headings = {heading for heading, _ in parse_top_level_sections(bootstrap_text)}
+    sections = []
+    for heading, body in parse_top_level_sections(target_text):
+        if heading in bootstrap_headings:
+            continue
+        normalized_body = normalize_whitespace(body)
+        if not normalized_body:
+            continue
+        if len(normalized_body.split()) <= 10 and has_placeholder_body(normalized_body):
+            continue
+        signature = ""
+        for line in body.splitlines():
+            stripped = line.strip()
+            if stripped:
+                signature = stripped
+                break
+        sections.append((heading, signature))
+    return sections
+
+
+def build_prompt(target_text: str, bootstrap_text: str) -> str:
+    return f"""Reconcile these two AGENTS.md documents into a single Markdown file for the target repository.
+
+Requirements:
+- Preserve meaningful repo-specific guidance from the target document.
+- Include the bootstrap-required OpenCode and Superpowers guidance from the bootstrap document.
+- Update overlapping sections instead of duplicating them.
+- Keep the result concise, technically specific, and valid Markdown.
+- Preserve repo-specific top-level sections when they contain substantive policy.
+- Return only the final AGENTS.md content. Do not add commentary, code fences, or explanations.
+
+Target AGENTS.md:
+<<<TARGET_AGENTS_MD
+{target_text}
+TARGET_AGENTS_MD
+
+Bootstrap AGENTS.md:
+<<<BOOTSTRAP_AGENTS_MD
+{bootstrap_text}
+BOOTSTRAP_AGENTS_MD
+"""
+
+
+def run_opencode(prompt: str, target_repo: str) -> str:
+    command = [
+        "opencode",
+        "run",
+        prompt,
+        "--format",
+        "json",
+        "--dir",
+        target_repo,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "opencode exited with a non-zero status"
+        raise SystemExit(f"opencode reconciliation failed: {detail}")
+
+    final_text = ""
+    for raw_line in result.stdout.splitlines():
+        if not raw_line.strip():
+            continue
+        try:
+            event = json.loads(raw_line)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"invalid JSON from opencode: {exc.msg}")
+        if event.get("type") != "text":
+            continue
+        part = event.get("part") or {}
+        text = part.get("text")
+        if isinstance(text, str):
+            final_text = text
+
+    if not final_text.strip():
+        raise SystemExit("opencode reconciliation returned empty output")
+    return final_text
+
+
+def validate_output(output_text: str, target_text: str, bootstrap_text: str) -> None:
+    if not output_text.strip():
+        raise SystemExit("reconciled AGENTS.md is empty")
+
+    missing_markers = [
+        marker for marker in REQUIRED_BOOTSTRAP_MARKERS if marker in bootstrap_text and marker not in output_text
+    ]
+    if missing_markers:
+        raise SystemExit(
+            "reconciled AGENTS.md is missing bootstrap-required guidance: "
+            + ", ".join(missing_markers)
+        )
+
+    repo_specific_sections = meaningful_repo_specific_sections(target_text, bootstrap_text)
+    if repo_specific_sections:
+        output_headings = {heading for heading, _ in parse_top_level_sections(output_text)}
+        output_normalized = normalize_whitespace(output_text)
+        kept_repo_specific_content = False
+        for heading, signature in repo_specific_sections:
+            if heading in output_headings:
+                kept_repo_specific_content = True
+                break
+            if signature and normalize_whitespace(signature) in output_normalized:
+                kept_repo_specific_content = True
+                break
+        if not kept_repo_specific_content:
+            raise SystemExit("reconciled AGENTS.md dropped all meaningful repo-specific top-level content")
+
+
+bootstrap_text = read_text(sys.argv[1])
+target_text = read_text(sys.argv[2])
+output_path = Path(sys.argv[3])
+target_repo = sys.argv[4]
+
+prompt = build_prompt(target_text, bootstrap_text)
+reconciled_text = run_opencode(prompt, target_repo)
+validate_output(reconciled_text, target_text, bootstrap_text)
+
+if not reconciled_text.endswith("\n"):
+    reconciled_text += "\n"
+output_path.write_text(reconciled_text)
+PY
+
+  mv -- "$reconciled_path" "$target_path"
+  printf 'reconciled: %s\n' "$target_path"
+}
+
+install_prerequisite_bootstrap_files() {
+  # Keep these ahead of GitHub configuration so future reconciliation
+  # failures stop before repository-side changes run.
+  reconcile_agents_md "$TARGET_REPO/AGENTS.md"
+  merge_opencode_json "$TARGET_REPO/opencode.json"
+}
+
 configure_github_repo() {
   local repo_slug=$1
 
-  require_command gh
   gh auth status >/dev/null 2>&1 || fail 'gh must already be authenticated'
   [ -f "$OPENCODE_AUTH_PATH" ] || fail "missing OpenCode auth file: $OPENCODE_AUTH_PATH"
 
@@ -216,13 +539,11 @@ configure_github_repo() {
   printf 'configured: repository merge settings\n'
 }
 
-require_command git
 ORIGIN_URL=$(git -C "$TARGET_REPO" remote get-url origin 2>/dev/null || true)
 [ -n "$ORIGIN_URL" ] || fail 'target repository must have an origin remote'
 REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 
-copy_file 'AGENTS.md' "$TARGET_REPO/AGENTS.md"
-copy_file 'opencode.json' "$TARGET_REPO/opencode.json"
+install_prerequisite_bootstrap_files
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
 
@@ -233,10 +554,10 @@ fi
 configure_github_repo "$REPO_SLUG"
 
 printf '\nNext steps:\n'
-if [ "$FORCE" = 'true' ]; then
-  printf '1. Review the replaced files in git diff before committing.\n'
-  printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
-else
-  printf '1. Review any *.oc-init-new files and merge them into your existing files.\n'
-  printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
-fi
+  if [ "$FORCE" = 'true' ]; then
+    printf '1. Review the reconciled AGENTS.md, merged opencode.json, and replaced copy-managed files in git diff before committing.\n'
+    printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
+  else
+    printf '1. Review the reconciled AGENTS.md, merged opencode.json, and any remaining *.oc-init-new files before committing.\n'
+    printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
+  fi
