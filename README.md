@@ -30,7 +30,7 @@ By default, existing repository content stays in place. `AGENTS.md` is reconcile
 
 - `AGENTS.md` reconciled with repository workflow and contribution guidance for OpenCode sessions.
 - `opencode.json` merged so the `superpowers` OpenCode plugin stays enabled alongside repo-specific config.
-- `.github/workflows/opencode.yml` to run OpenCode from issue comments and PR review activity.
+- `.github/workflows/opencode.yml` to run OpenCode from issue comments and PR review comments.
 - `.github/workflows/opencode-scheduled.yml` to perform scheduled repository reviews.
 - `.gitignore` updated to include the local `.worktrees` convention used by the branching guide.
 - GitHub labels, secret, workflow permissions, PR approval permissions, and merge settings configured through `gh`.
