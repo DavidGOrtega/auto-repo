@@ -42,6 +42,9 @@ jobs:
         with:
           fetch-depth: 1
           token: ${{ secrets.MASTER_GITHUB_TOKEN }}
+
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
           
       - name: Restore OpenCode credentials
         env:
@@ -56,29 +59,45 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - uses: anomalyco/opencode/github@latest
+      - name: Run OpenCode reviewer
         env:
           GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
-        with:
-          model: github-copilot/claude-opus-4.6
-          mentions: /reviewer
-          use_github_token: true
-          prompt: |
-            You have Superpowers. Use them to review this pull request.
+          OPENCODE_PERMISSION: |
+            {
+              "bash": {
+                "*": "deny",
+                "gh pr *": "allow"
+              },
+              "webfetch": "deny"
+            }
+        run: |
+          export PATH="$HOME/.opencode/bin:$PATH"
+          pr_number=${{ github.event_name == 'issue_comment' && github.event.issue.number || github.event.pull_request.number }}
+          prompt_file=$(mktemp)
+          cat > "$prompt_file" <<EOF
+          You have Superpowers. Use them to review pull request #$pr_number.
 
-            Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
-            Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
-            Use existing pull request comments and reviews as context when they are relevant to a re-review.
+          Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
+          Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
+          Use existing pull request comments and reviews as context when they are relevant to a re-review.
 
-            Review requirements:
-            1. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
-            2. Re-review Behavior:
-              - If this pull request was already reviewed before, focus on whether previously requested changes were resolved.
-              - Do not restate the full prior review unless it is necessary.
-              - Mention only newly found issues or confirm that previous issues are resolved.
-            3. Output:
-              - Every review must start with a first line exactly in the form `# REVIEW <sha>` where `<sha>` is the commit being reviewed.
-              - If changes are required, after the title write a short enumerated list of precise requested fixes and end with `/coder fix this`.
-              - If the pull request is acceptable, after the title write at most two short sentences, do not use bullets, do not include cosmetic notes, and end with `LGTM`.
-              - Keep the review concise and avoid repeating the full diff.
-              - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
+          You must use GitHub CLI commands to inspect the pull request and then submit exactly one final GitHub pull request review. Do not post issue comments. Do not submit multiple reviews.
+
+          Use `gh pr review` to submit the final review on pull request #$pr_number.
+          If the final review body ends with `LGTM`, submit an approval review.
+          Otherwise submit a comment review.
+
+          Review requirements:
+          1. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
+          2. Re-review Behavior:
+            - If this pull request was already reviewed before, focus on whether previously requested changes were resolved.
+            - Do not restate the full prior review unless it is necessary.
+            - Mention only newly found issues or confirm that previous issues are resolved.
+          3. Output:
+            - Every review must start with a first line exactly in the form `# REVIEW <sha>` where `<sha>` is the commit being reviewed.
+            - If changes are required, after the title write a short enumerated list of precise requested fixes and end with `/coder fix this`.
+            - If the pull request is acceptable, after the title write at most two short sentences, do not use bullets, do not include cosmetic notes, and end with `LGTM`.
+            - Keep the review concise and avoid repeating the full diff.
+            - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
+          EOF
+          opencode run -m github-copilot/claude-opus-4.6 "$(cat "$prompt_file")"
