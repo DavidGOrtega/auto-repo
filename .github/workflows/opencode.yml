@@ -59,6 +59,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Mark coder commits
+        run: |
+          hook=.git/hooks/commit-msg
+          printf '%s\n' '#!/bin/sh' > "$hook"
+          printf '%s\n' 'msg_file="$1"' >> "$hook"
+          printf '%s\n' 'if grep -qx "By: coder" "$msg_file"; then' >> "$hook"
+          printf '%s\n' '  exit 0' >> "$hook"
+          printf '%s\n' 'fi' >> "$hook"
+          printf '%s\n' 'printf "\nBy: coder\n" >> "$msg_file"' >> "$hook"
+          chmod +x "$hook"
+
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:

@@ -110,6 +110,7 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 - OpenCode reads the repository `opencode.json`, so the bundled `superpowers` plugin is available without modifying workflow files.
 - `oc-init` now requires the local `opencode` CLI so it can reconcile `AGENTS.md` before applying repository-side GitHub configuration.
 - Git author configuration is handled inside the workflows so automation can create commits when needed.
+- Commits created by the `/coder` workflow are tagged with the commit trailer `By: coder` so reviewer automation can tell when a follow-up `/coder fix this` is valid.
 - `oc-init` configures the repository so GitHub Actions can create and approve pull requests.
 - OpenCode uses the default `GITHUB_TOKEN` by default, but if you need workflow-triggered PR creation or chained automation between workflows, a dedicated higher-privilege token may still be required.
 - The scheduled workflow is optional; add it with `./oc-init --with-scheduled` or `bash -s -- --with-scheduled` if you want automated periodic repository reviews.

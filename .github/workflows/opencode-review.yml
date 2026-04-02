@@ -93,9 +93,11 @@ jobs:
             - If this pull request was already reviewed before, focus on whether previously requested changes were resolved.
             - Do not restate the full prior review unless it is necessary.
             - Mention only newly found issues or confirm that previous issues are resolved.
+            - Before ending with `/coder fix this`, inspect the commit message for the commit being reviewed. Only include `/coder fix this` when that commit message contains the exact trailer `By: coder`.
           3. Output:
             - Every review must start with a first line exactly in the form `# REVIEW <sha>` where `<sha>` is the commit being reviewed.
-            - If changes are required, after the title write a short enumerated list of precise requested fixes and end with `/coder fix this`.
+            - If changes are required and the reviewed commit includes `By: coder`, after the title write a short enumerated list of precise requested fixes and end with `/coder fix this`.
+            - If changes are required and the reviewed commit does not include `By: coder`, write the requested fixes but do not include `/coder fix this`.
             - If the pull request is acceptable, after the title write at most two short sentences, do not use bullets, do not include cosmetic notes, and end with `LGTM`.
             - Keep the review concise and avoid repeating the full diff.
             - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
