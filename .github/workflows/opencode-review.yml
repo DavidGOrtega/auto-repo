@@ -74,8 +74,8 @@ jobs:
           export PATH="$HOME/.opencode/bin:$PATH"
           pr_number=${{ github.event_name == 'issue_comment' && github.event.issue.number || github.event.pull_request.number }}
           prompt_file=$(mktemp)
-          cat > "$prompt_file" <<EOF
-          You have Superpowers. Use them to review pull request #$pr_number.
+          cat > "$prompt_file" <<'EOF'
+          You have Superpowers. Use them to review pull request #PR_NUMBER#.
 
           Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
           Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
@@ -83,7 +83,7 @@ jobs:
 
           You must use GitHub CLI commands to inspect the pull request and then submit exactly one final GitHub pull request review. Do not post issue comments. Do not submit multiple reviews.
 
-          Use `gh pr review` to submit the final review on pull request #$pr_number.
+          Use `gh pr review` to submit the final review on pull request #PR_NUMBER#.
           If the final review body ends with `LGTM`, submit an approval review.
           Otherwise submit a comment review.
 
@@ -102,4 +102,5 @@ jobs:
             - Keep the review concise and avoid repeating the full diff.
             - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
           EOF
+          perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
           opencode run -m github-copilot/claude-opus-4.6 "$(cat "$prompt_file")"
