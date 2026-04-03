@@ -31,6 +31,7 @@ By default, existing repository content stays in place. `AGENTS.md` is reconcile
 - `AGENTS.md` reconciled with repository workflow and contribution guidance for OpenCode sessions.
 - `opencode.json` merged so the `superpowers` OpenCode plugin stays enabled alongside repo-specific config.
 - `.github/workflows/opencode.yml` to run OpenCode from issue comments and PR review activity.
+- `.github/workflows/opencode-review.yml` to run reviewer automation on pull requests.
 - `.github/workflows/opencode-scheduled.yml` to perform scheduled repository reviews.
 - `.gitignore` updated to include the local `.worktrees` convention used by the branching guide.
 - GitHub labels, secret, workflow permissions, PR approval permissions, and merge settings configured through `gh`.
@@ -102,7 +103,7 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 2. Review the reconciled `AGENTS.md` and merged `opencode.json` in git diff, and review any generated `*.oc-init-new` files for the remaining managed files.
 3. Adjust branch naming, review conventions, or plugin configuration if your team uses different defaults.
 4. Commit the resulting files in the target repository.
-5. Open an issue or PR comment with `/coder`, or open a PR comment with `/reviewer`, to verify the workflows are active.
+5. Open an issue or PR comment with `/coder`, or push a follow-up commit to a PR, to verify the workflows are active.
 
 ## Notes
 
