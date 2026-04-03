@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+curl -fsSL https://opencode.ai/install | bash
+
 mkdir -p "$HOME/.config/opencode"
 cat > "$HOME/.config/opencode/opencode.json" <<'CONFIG'
 {
