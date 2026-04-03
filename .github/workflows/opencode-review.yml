@@ -70,7 +70,83 @@ jobs:
           EOF
           perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
           opencode run --format json "$(cat "$prompt_file")" > "$review_file.json"
-          ruby -rjson -e 'text = File.readlines(ARGV[0]).filter_map { |line| event = JSON.parse(line) rescue nil; part = event && event["part"]; part && part["type"] == "text" ? part["text"] : nil }.join("\n").strip; abort("No review payload produced") if text.empty?; payload = nil; text.scan(/\{.*?\}/m).reverse_each do |candidate|; begin; parsed = JSON.parse(candidate); next unless parsed.is_a?(Hash); next unless parsed["commit"].to_s.match?(/^[0-9a-f]{7,40}$/); next unless ["lgtm", "changes_requested"].include?(parsed["status"]); next unless parsed["summary"].is_a?(Array) && parsed["summary"].all? { |item| item.is_a?(String) && !item.strip.empty? }; next unless parsed["allow_coder"] == true || parsed["allow_coder"] == false; payload = parsed; break; rescue JSON::ParserError; end; end; abort("No valid review JSON found") unless payload; File.write(ARGV[1], JSON.dump(payload))' "$review_file.json" "$review_file.payload"
+          ruby -rjson -e '
+            raw = File.read(ARGV[0])
+            abort("No review payload produced") if raw.strip.empty?
+
+            def normalize_payload(candidate)
+              return unless candidate.is_a?(Hash)
+
+              payload = candidate.transform_keys(&:to_s)
+              commit = payload["commit"].to_s.strip
+              return unless commit.match?(/^[0-9a-f]{7,40}$/)
+
+              status = payload["status"].to_s.strip.downcase.gsub(/[ -]+/, "_")
+              status = "lgtm" if ["approve", "approved"].include?(status)
+              status = "changes_requested" if ["changes", "request_changes", "requested_changes"].include?(status)
+              return unless ["lgtm", "changes_requested"].include?(status)
+
+              summary = payload["summary"]
+              summary = [summary] if summary.is_a?(String)
+              return unless summary.is_a?(Array)
+              summary = summary.filter_map do |item|
+                text = item.to_s.strip
+                text.empty? ? nil : text
+              end
+              return if summary.empty?
+
+              allow_coder = payload["allow_coder"]
+              return unless allow_coder == true || allow_coder == false
+
+              {
+                "commit" => commit,
+                "status" => status,
+                "summary" => summary,
+                "allow_coder" => allow_coder,
+              }
+            end
+
+            def collect_candidates(node, candidates)
+              case node
+              when Hash
+                normalized = normalize_payload(node)
+                candidates << normalized if normalized
+                node.each_value { |value| collect_candidates(value, candidates) }
+              when Array
+                node.each { |value| collect_candidates(value, candidates) }
+              when String
+                text = node.strip
+                return if text.empty?
+                begin
+                  parsed = JSON.parse(text)
+                  collect_candidates(parsed, candidates)
+                rescue JSON::ParserError
+                end
+              end
+            end
+
+            candidates = []
+            raw.each_line do |line|
+              begin
+                collect_candidates(JSON.parse(line), candidates)
+              rescue JSON::ParserError
+              end
+            end
+
+            begin
+              collect_candidates(JSON.parse(raw), candidates)
+            rescue JSON::ParserError
+            end
+
+            payload = candidates.last
+            unless payload
+              preview = raw.each_line.first(20).join
+              warn("OpenCode output preview:\n#{preview}") unless preview.empty?
+              abort("No valid review JSON found")
+            end
+
+            File.write(ARGV[1], JSON.dump(payload))
+          ' "$review_file.json" "$review_file.payload"
 
           ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); lines = ["# REVIEW #{payload.fetch("commit")}", ""]; if payload.fetch("status") == "lgtm"; abort("LGTM summary must be 1-2 items") unless payload.fetch("summary").length.between?(1, 2); lines.concat(payload.fetch("summary")); lines << "LGTM"; else payload.fetch("summary").each_with_index { |item, idx| lines << "#{idx + 1}. #{item}" }; lines << "/coder fix this" if payload.fetch("allow_coder"); end; File.write(ARGV[1], lines.join("\n") + "\n")' "$review_file.payload" "$review_file"
 
