@@ -77,10 +77,10 @@ jobs:
 
           ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); lines = ["# REVIEW #{payload.fetch("commit")}", ""]; if payload.fetch("status") == "lgtm"; abort("LGTM summary must be 1-2 items") unless payload.fetch("summary").length.between?(1, 2); lines.concat(payload.fetch("summary")); lines << "LGTM"; else payload.fetch("summary").each_with_index { |item, idx| lines << "#{idx + 1}. #{item}" }; lines << "/coder fix this" if payload.fetch("allow_coder"); end; File.write(ARGV[1], lines.join("\n") + "\n")' "$review_file.payload" "$review_file"
 
-          if ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); exit(payload["status"] == "lgtm" ? 0 : 1)' "$review_file.payload"; then
-            gh pr review "$pr_number" --approve --body-file "$review_file"
-          elif [ "$pr_author" = "${{ github.repository_owner }}" ]; then
+          if [ "$pr_author" = "${{ github.repository_owner }}" ]; then
             gh pr comment "$pr_number" --body-file "$review_file"
+          elif ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); exit(payload["status"] == "lgtm" ? 0 : 1)' "$review_file.payload"; then
+            gh pr review "$pr_number" --approve --body-file "$review_file"
           else
             gh pr review "$pr_number" --request-changes --body-file "$review_file"
           fi
