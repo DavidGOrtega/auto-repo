@@ -1,0 +1,49 @@
+name: opencode-triage
+
+on:
+  schedule:
+    - cron: '0 15 * * *'
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Restore OpenCode credentials
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+          chmod 600 "$HOME/.local/share/opencode/auth.json"
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: github-copilot/gpt-5.4
+          use_github_token: true
+          prompt: |
+            Review the codebase for bugs, broken behavior, missing error handling, and TODO comments.
+            First, review existing open issues and conservatively close only those that are clearly obsolete, duplicate, or already fixed based on the current repository state and relevant GitHub metadata.
+            When closing an issue, leave a short technical explanation with 1-2 evidence points and reference the matching issue, PR, commit, file, or workflow when available.
+            If the evidence is incomplete or ambiguous, do not close the issue.
+            Do not close issues only because they are old.
+            Do not close feature requests that are still simply unimplemented.
+            Before opening any new issue, review existing open issues and recently closed issues to avoid duplicates.
+            If an equivalent issue already exists, do not open a new one.
+            If you find work worth tracking and no equivalent issue exists, open GitHub issues with clear titles and concise technical descriptions.
+            Use the `bug` label for confirmed defects.
