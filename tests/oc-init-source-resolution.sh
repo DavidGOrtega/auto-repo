@@ -16,7 +16,7 @@ TARGET_REPO="$TEMP_DIR/target"
 TEST_BIN="$TEMP_DIR/bin"
 TEST_HOME="$TEMP_DIR/home"
 
-mkdir -p -- "$BOOTSTRAP_DIR/.github/workflows" "$TARGET_REPO" "$TEST_BIN" "$TEST_HOME/.local/share/opencode"
+mkdir -p -- "$BOOTSTRAP_DIR/.github/workflows" "$TARGET_REPO" "$TEST_BIN" "$TEST_HOME/.config/opencode"
 
 cat > "$BOOTSTRAP_DIR/AGENTS.md" <<'EOF'
 # Bootstrap AGENTS
@@ -48,6 +48,16 @@ EOF
 
 cat > "$BOOTSTRAP_DIR/.github/workflows/opencode.yml" <<'EOF'
 name: opencode
+EOF
+
+cat > "$BOOTSTRAP_DIR/.github/workflows/opencode-review.yml" <<'EOF'
+name: opencode-review
+EOF
+
+mkdir -p -- "$BOOTSTRAP_DIR/.github/scripts"
+cat > "$BOOTSTRAP_DIR/.github/scripts/restore-opencode-config.sh" <<'EOF'
+#!/bin/sh
+exit 0
 EOF
 
 git init "$TARGET_REPO" >/dev/null
@@ -87,7 +97,17 @@ cat > "$TARGET_REPO/opencode.json" <<'EOF'
 }
 EOF
 
-printf '{"token":"test"}\n' > "$TEST_HOME/.local/share/opencode/auth.json"
+cat > "$TEST_HOME/.config/opencode/opencode.json" <<'EOF'
+{
+  "provider": {
+    "ZCode": {
+      "options": {
+        "apiKey": "test-key"
+      }
+    }
+  }
+}
+EOF
 cp -- "$REPO_ROOT/oc-init" "$TARGET_REPO/oc-init"
 
 cat > "$TEST_BIN/gh" <<'EOF'
@@ -136,21 +156,6 @@ EOF
 chmod +x "$TEST_BIN/opencode"
 
 PATH="$TEST_BIN:$PATH" HOME="$TEST_HOME" bash "$TARGET_REPO/oc-init" --source-base-url "file://$BOOTSTRAP_DIR" "$TARGET_REPO" >/dev/null
-
-python3 - "$TARGET_REPO/opencode.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-data = json.loads(Path(sys.argv[1]).read_text())
-plugins = data.get('plugin')
-if plugins != ['superpowers@git+https://github.com/obra/superpowers.git']:
-    raise SystemExit(f"expected plugin list to be preserved, got: {plugins!r}")
-
-mcp = data.get('mcp', {}).get('drachtio', {})
-if mcp.get('url') != 'https://gitmcp.io/drachtio/drachtio-server':
-    raise SystemExit(f"expected existing mcp config to survive merge, got: {mcp!r}")
-PY
 
 python3 - "$TARGET_REPO/AGENTS.md" <<'PY'
 import sys

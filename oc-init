@@ -4,7 +4,6 @@ set -euo pipefail
 
 DEFAULT_SOURCE_BASE_URL='https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master'
 WORKTREE_IGNORE_ENTRY='.worktrees'
-OPENCODE_AUTH_PATH=${HOME}/.local/share/opencode/auth.json
 OPENCODE_CONFIG_PATH=${HOME}/.config/opencode/opencode.json
 
 usage() {
@@ -438,14 +437,10 @@ configure_github_repo() {
   local zai_api_key
 
   gh auth status >/dev/null 2>&1 || fail 'gh must already be authenticated'
-  [ -f "$OPENCODE_AUTH_PATH" ] || fail "missing OpenCode auth file: $OPENCODE_AUTH_PATH"
   [ -f "$OPENCODE_CONFIG_PATH" ] || fail "missing OpenCode config file: $OPENCODE_CONFIG_PATH"
 
   gh label create bug --repo "$repo_slug" --color D73A4A --description "Something isn't working" --force >/dev/null
   printf 'configured: label bug\n'
-
-  gh secret set OPENCODE_AUTH_JSON --repo "$repo_slug" < "$OPENCODE_AUTH_PATH" >/dev/null
-  printf 'configured: secret OPENCODE_AUTH_JSON\n'
 
   zai_api_key=$(python3 - "$OPENCODE_CONFIG_PATH" <<'PY'
 import json
