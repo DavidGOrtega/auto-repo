@@ -62,8 +62,8 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.MASTER_GITHUB_TOKEN }}
 
-      - name: Restore OpenCode config
-        run: ./.github/scripts/restore-opencode-config.sh
+      - name: Install OpenCode
+        run: ./.github/scripts/install-opencode.sh
 
       - name: Configure git author
         run: |
