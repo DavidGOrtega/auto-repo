@@ -16,16 +16,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore OpenCode config
-        run: ./.github/scripts/restore-opencode-config.sh
+      - name: Install OpenCode
+        run: ./.github/scripts/install-opencode.sh
 
       - name: Configure git author
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Install OpenCode
-        run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Run OpenCode triage
         env:
