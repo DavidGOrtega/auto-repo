@@ -41,7 +41,7 @@ jobs:
             {
               "bash": {
                 "*": "deny",
-                "gh pr *": "allow"
+                "gh pr view *": "allow"
               },
               "webfetch": "deny"
             }
@@ -49,6 +49,7 @@ jobs:
           export PATH="$HOME/.opencode/bin:$PATH"
           pr_number=${{ github.event.pull_request.number }}
           prompt_file=$(mktemp)
+          review_file=$(mktemp)
           cat > "$prompt_file" <<'EOF'
           You have Superpowers. Use them to review pull request #PR_NUMBER#.
 
@@ -56,11 +57,7 @@ jobs:
           Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
           Use existing pull request comments and reviews as context when they are relevant to a re-review.
 
-          You must use GitHub CLI commands to inspect the pull request and then submit exactly one final GitHub pull request review. Do not post issue comments. Do not submit multiple reviews.
-
-          Use `gh pr review` to submit the final review on pull request #PR_NUMBER#.
-          If the final review body ends with `LGTM`, submit an approval review.
-          Otherwise submit a comment review.
+          Use GitHub CLI commands only to inspect the pull request. Do not submit the review yourself. Do not post issue comments. Do not post multiple reviews.
 
           Review requirements:
           1. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
@@ -76,6 +73,16 @@ jobs:
             - If the pull request is acceptable, after the title write at most two short sentences, do not use bullets, do not include cosmetic notes, and end with `LGTM`.
             - Keep the review concise and avoid repeating the full diff.
             - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
+            - Return only the final review body text. No markdown fences. No explanations before or after the review body.
           EOF
           perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
-          opencode run -m github-copilot/claude-opus-4.6 "$(cat "$prompt_file")"
+          opencode run --format json -m github-copilot/claude-opus-4.6 "$(cat "$prompt_file")" > "$review_file.json"
+          ruby -rjson -e 'text = File.readlines(ARGV[0]).filter_map { |line| event = JSON.parse(line) rescue nil; part = event && event["part"]; part && part["type"] == "text" ? part["text"] : nil }.join("\n").strip; abort("No review text produced") if text.empty?; File.write(ARGV[1], text)' "$review_file.json" "$review_file"
+
+          ruby -e 'text = File.read(ARGV[0]); lines = text.lines.map(&:chomp); abort("Review title missing") unless lines[0]&.match?(/^# REVIEW [0-9a-f]{7,40}$/); if text.rstrip.end_with?("LGTM"); body = lines[1..].reject { |line| line.strip.empty? }; abort("LGTM review must be concise") if body.length > 2; abort("LGTM review must not include /coder fix this") if text.include?("/coder fix this"); else numbered = lines[1..].reject { |line| line.strip.empty? }; abort("Change-request review must use enumerated list") unless numbered.all? { |line| line.match?(/^\d+\. /) || line == "/coder fix this" }; if text.include?("/coder fix this"); idx = numbered.index("/coder fix this"); abort("/coder fix this must be last") unless idx == numbered.length - 1; end; end' "$review_file"
+
+          if [ "$(tail -n 1 "$review_file")" = "LGTM" ]; then
+            gh pr review "$pr_number" --approve --body-file "$review_file"
+          else
+            gh pr review "$pr_number" --comment --body-file "$review_file"
+          fi
