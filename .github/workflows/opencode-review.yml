@@ -41,7 +41,6 @@ jobs:
         run: |
           export PATH="$HOME/.opencode/bin:$PATH"
           pr_number=${{ github.event.pull_request.number }}
-          pr_author=${{ github.event.pull_request.user.login }}
           prompt_file=$(mktemp)
           review_file=$(mktemp)
           cat > "$prompt_file" <<'EOF'
@@ -61,99 +60,13 @@ jobs:
             - Mention only newly found issues or confirm that previous issues are resolved.
             - Inspect the commit message for the commit being reviewed and determine whether it contains the exact trailer `By: coder`.
           3. Output:
-            - Return only one valid JSON object with the keys `commit`, `status`, `summary`, and `allow_coder`.
-            - `commit` must be the actual reviewed commit SHA, not a placeholder.
-            - `status` must be `lgtm` only when the pull request is acceptable.
-            - `summary` must contain 1-2 short sentences for `lgtm`, or a short list of precise requested fixes for `changes_requested`.
-            - `allow_coder` must be true only when the reviewed commit includes `By: coder`.
-            - Do not include markdown fences or any extra text before or after the JSON object.
+            - Return only the final review body text that should be posted as a PR comment.
+            - The first line must be `# REVIEW <sha>` using the actual reviewed commit SHA.
+            - If the pull request is acceptable, include 1-2 short sentences and end with `LGTM`.
+            - If changes are required, use a short numbered list of precise fixes.
+            - Append `/coder fix this` only when changes are required and the reviewed commit includes the exact trailer `By: coder`.
+            - Do not include markdown fences or any extra text before or after the final review body.
           EOF
           perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
-          opencode run --format json -m ZCode/glm-5.1 "$(cat "$prompt_file")" > "$review_file.json"
-          ruby -rjson -e '
-            raw = File.read(ARGV[0])
-            abort("No review payload produced") if raw.strip.empty?
-
-            def normalize_payload(candidate)
-              return unless candidate.is_a?(Hash)
-
-              payload = candidate.transform_keys(&:to_s)
-              commit = payload["commit"].to_s.strip
-              return unless commit.match?(/^[0-9a-f]{7,40}$/)
-
-              status = payload["status"].to_s.strip.downcase.gsub(/[ -]+/, "_")
-              status = "lgtm" if ["approve", "approved"].include?(status)
-              status = "changes_requested" if ["changes", "request_changes", "requested_changes"].include?(status)
-              return unless ["lgtm", "changes_requested"].include?(status)
-
-              summary = payload["summary"]
-              summary = [summary] if summary.is_a?(String)
-              return unless summary.is_a?(Array)
-              summary = summary.filter_map do |item|
-                text = item.to_s.strip
-                text.empty? ? nil : text
-              end
-              return if summary.empty?
-
-              allow_coder = payload["allow_coder"]
-              return unless allow_coder == true || allow_coder == false
-
-              {
-                "commit" => commit,
-                "status" => status,
-                "summary" => summary,
-                "allow_coder" => allow_coder,
-              }
-            end
-
-            def collect_candidates(node, candidates)
-              case node
-              when Hash
-                normalized = normalize_payload(node)
-                candidates << normalized if normalized
-                node.each_value { |value| collect_candidates(value, candidates) }
-              when Array
-                node.each { |value| collect_candidates(value, candidates) }
-              when String
-                text = node.strip
-                return if text.empty?
-                begin
-                  parsed = JSON.parse(text)
-                  collect_candidates(parsed, candidates)
-                rescue JSON::ParserError
-                end
-              end
-            end
-
-            candidates = []
-            raw.each_line do |line|
-              begin
-                collect_candidates(JSON.parse(line), candidates)
-              rescue JSON::ParserError
-              end
-            end
-
-            begin
-              collect_candidates(JSON.parse(raw), candidates)
-            rescue JSON::ParserError
-            end
-
-            payload = candidates.last
-            unless payload
-              preview = raw.each_line.first(20).join
-              warn("OpenCode output preview:\n#{preview}") unless preview.empty?
-              abort("No valid review JSON found")
-            end
-
-            File.write(ARGV[1], JSON.dump(payload))
-          ' "$review_file.json" "$review_file.payload"
-
-          ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); lines = ["# REVIEW #{payload.fetch("commit")}", ""]; if payload.fetch("status") == "lgtm"; abort("LGTM summary must be 1-2 items") unless payload.fetch("summary").length.between?(1, 2); lines.concat(payload.fetch("summary")); lines << "LGTM"; else payload.fetch("summary").each_with_index { |item, idx| lines << "#{idx + 1}. #{item}" }; lines << "/coder fix this" if payload.fetch("allow_coder"); end; File.write(ARGV[1], lines.join("\n") + "\n")' "$review_file.payload" "$review_file"
-
-          if [ "$pr_author" = "${{ github.repository_owner }}" ]; then
-            gh pr comment "$pr_number" --body-file "$review_file"
-          elif ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); exit(payload["status"] == "lgtm" ? 0 : 1)' "$review_file.payload"; then
-            gh pr review "$pr_number" --approve --body-file "$review_file"
-          else
-            gh pr review "$pr_number" --request-changes --body-file "$review_file"
-          fi
+          opencode run -m ZCode/glm-5.1 "$(cat "$prompt_file")" > "$review_file"
+          gh pr comment "$pr_number" --body-file "$review_file"
