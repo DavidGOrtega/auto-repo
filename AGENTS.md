@@ -42,6 +42,17 @@ When a working branch needs the latest `master` or `main`, prefer an explicit `g
 - Do not replace this flow with rebase or other history-rewriting commands.
 - If you describe the update in logs or comments, say plainly that you pulled the default branch and resolved conflicts.
 
+### CI Conflict Resolution
+
+When running in GitHub Actions (CI), the agent MUST check for and resolve merge conflicts before pushing:
+
+1. **Detect the base branch.** Use `gh pr view --json baseRefName` or check the PR context to determine the base branch (`master` or `main`).
+2. **Check for conflicts.** Run `gh pr view --json mergeable` to see if the PR has conflicts. If `mergeable` is `CONFLICTING`, you MUST resolve them.
+3. **Pull the base branch.** Run `git fetch origin <base-branch>` and then `git pull origin <base-branch>` (no rebase). This will produce conflict markers in the affected files.
+4. **Resolve the conflicts.** Edit each conflicted file, removing all conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) and keeping the correct content from both sides.
+5. **Stage and commit.** `git add` the resolved files and commit the merge.
+6. **Push.** Push the resolved branch so the PR becomes mergeable.
+
 ### Superpowers Agent Rules
 
 This repository uses Superpowers for agent-driven work. Agents must use the relevant Superpowers skill flow for the task they are performing instead of improvising repository policy on their own.
