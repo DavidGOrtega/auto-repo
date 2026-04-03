@@ -85,4 +85,4 @@ jobs:
           EOF
           sed -i "s/ISSUE_NUMBER/${{ github.event.issue.number }}/g" "$prompt_file"
           sed -i "s|REPOSITORY|${{ github.repository }}|g" "$prompt_file"
-          opencode run --format json -m ZCode/glm-5.1 "$(cat "$prompt_file")"
+          opencode run --format json "$(cat "$prompt_file")"

@@ -7,6 +7,7 @@ mkdir -p "$HOME/.config/opencode"
 cat > "$HOME/.config/opencode/opencode.json" <<'CONFIG'
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "ZCode/glm-5.1",
   "plugin": [
     "superpowers@git+https://github.com/obra/superpowers.git"
   ],
