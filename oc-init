@@ -5,9 +5,7 @@ set -euo pipefail
 DEFAULT_SOURCE_BASE_URL='https://raw.githubusercontent.com/DavidGOrtega/auto-repo/master'
 WORKTREE_IGNORE_ENTRY='.worktrees'
 OPENCODE_AUTH_PATH=${HOME}/.local/share/opencode/auth.json
-# Keep the bundled Superpowers plugin active by enforcing only the bootstrap
-# keys that OpenCode needs for plugin loading.
-OPENCODE_BOOTSTRAP_REQUIRED_KEYS='["plugin"]'
+OPENCODE_CONFIG_PATH=${HOME}/.config/opencode/opencode.json
 
 usage() {
   cat <<'EOF'
@@ -200,102 +198,6 @@ copy_file() {
   fi
 
   printf 'copied: %s\n' "$target_path"
-}
-
-merge_opencode_json() {
-  local target_path=$1
-  local source_path
-  local merged_path="$TEMP_DIR/opencode.json.merged"
-  local existed_before='false'
-
-  source_path=$(resolve_source_path 'opencode.json')
-
-  mkdir -p -- "$(dirname -- "$target_path")"
-
-  if [ -e "$target_path" ]; then
-    existed_before='true'
-  fi
-
-  python3 - "$source_path" "$target_path" "$merged_path" "$OPENCODE_BOOTSTRAP_REQUIRED_KEYS" <<'PY' || fail "failed to reconcile $target_path"
-import json
-import sys
-from pathlib import Path
-
-
-def load_json(path_str: str):
-    path = Path(path_str)
-    try:
-        data = json.loads(path.read_text())
-    except FileNotFoundError:
-        raise SystemExit(f"missing JSON file: {path}")
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"malformed JSON in {path}: {exc.msg} at line {exc.lineno} column {exc.colno}")
-    if not isinstance(data, dict):
-        raise SystemExit(f"JSON root must be an object: {path}")
-    return data
-
-
-def dedupe_array(values):
-    seen = set()
-    merged = []
-    for value in values:
-        key = json.dumps(value, sort_keys=True, separators=(",", ":"))
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(value)
-    return merged
-
-
-def normalize_required_value(value):
-    if isinstance(value, list):
-        return dedupe_array(value)
-    if isinstance(value, dict):
-        return {key: normalize_required_value(child) for key, child in value.items()}
-    return value
-
-
-def merge_json(bootstrap_value, target_value):
-    if isinstance(bootstrap_value, dict) and isinstance(target_value, dict):
-        merged = {}
-        for key in target_value:
-            if key in bootstrap_value:
-                merged[key] = merge_json(bootstrap_value[key], target_value[key])
-            else:
-                merged[key] = target_value[key]
-        for key in bootstrap_value:
-            if key not in merged:
-                merged[key] = bootstrap_value[key]
-        return merged
-    if isinstance(bootstrap_value, list) and isinstance(target_value, list):
-        return dedupe_array(target_value + bootstrap_value)
-    return target_value
-
-
-bootstrap = load_json(sys.argv[1])
-target_path = Path(sys.argv[2])
-output_path = Path(sys.argv[3])
-required_keys = json.loads(sys.argv[4])
-
-target = {} if not target_path.exists() else load_json(sys.argv[2])
-
-merged = merge_json(bootstrap, target)
-for key in required_keys:
-    if key in bootstrap:
-        if key in target and isinstance(bootstrap[key], type(target[key])):
-            merged[key] = merge_json(bootstrap[key], target[key])
-        else:
-            merged[key] = normalize_required_value(bootstrap[key])
-
-output_path.write_text(json.dumps(merged, indent=2) + "\n")
-PY
-
-  mv -- "$merged_path" "$target_path"
-  if [ "$existed_before" = 'true' ]; then
-    printf 'reconciled: %s\n' "$target_path"
-  else
-    printf 'copied: %s\n' "$target_path"
-  fi
 }
 
 reconcile_agents_md() {
@@ -508,23 +410,40 @@ PY
 }
 
 install_prerequisite_bootstrap_files() {
-  # Keep these ahead of GitHub configuration so future reconciliation
-  # failures stop before repository-side changes run.
   reconcile_agents_md "$TARGET_REPO/AGENTS.md"
-  merge_opencode_json "$TARGET_REPO/opencode.json"
 }
 
 configure_github_repo() {
   local repo_slug=$1
+  local zai_api_key
 
   gh auth status >/dev/null 2>&1 || fail 'gh must already be authenticated'
   [ -f "$OPENCODE_AUTH_PATH" ] || fail "missing OpenCode auth file: $OPENCODE_AUTH_PATH"
+  [ -f "$OPENCODE_CONFIG_PATH" ] || fail "missing OpenCode config file: $OPENCODE_CONFIG_PATH"
 
   gh label create bug --repo "$repo_slug" --color D73A4A --description "Something isn't working" --force >/dev/null
   printf 'configured: label bug\n'
 
   gh secret set OPENCODE_AUTH_JSON --repo "$repo_slug" < "$OPENCODE_AUTH_PATH" >/dev/null
   printf 'configured: secret OPENCODE_AUTH_JSON\n'
+
+  zai_api_key=$(python3 - "$OPENCODE_CONFIG_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config = json.loads(Path(sys.argv[1]).read_text())
+provider = config.get("provider", {})
+zcode = provider.get("ZCode", {})
+options = zcode.get("options", {})
+api_key = options.get("apiKey", "")
+if not api_key:
+    raise SystemExit("ZCode apiKey not found in config")
+print(api_key)
+PY
+  ) || fail "failed to extract ZAI_API_KEY from $OPENCODE_CONFIG_PATH"
+  printf '%s' "$zai_api_key" | gh secret set ZAI_API_KEY --repo "$repo_slug" >/dev/null
+  printf 'configured: secret ZAI_API_KEY\n'
 
   gh api --method PUT "repos/$repo_slug/actions/permissions/workflow" \
     -f default_workflow_permissions=write \
@@ -554,10 +473,10 @@ fi
 configure_github_repo "$REPO_SLUG"
 
 printf '\nNext steps:\n'
-  if [ "$FORCE" = 'true' ]; then
-    printf '1. Review the reconciled AGENTS.md, merged opencode.json, and replaced copy-managed files in git diff before committing.\n'
-    printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
-  else
-    printf '1. Review the reconciled AGENTS.md, merged opencode.json, and any remaining *.oc-init-new files before committing.\n'
-    printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
-  fi
+if [ "$FORCE" = 'true' ]; then
+  printf '1. Review the reconciled AGENTS.md and replaced copy-managed files in git diff before committing.\n'
+  printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
+else
+  printf '1. Review the reconciled AGENTS.md and any remaining *.oc-init-new files before committing.\n'
+  printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
+fi
