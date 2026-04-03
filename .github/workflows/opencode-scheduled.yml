@@ -16,8 +16,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Restore OpenCode config
-        run: ./.github/scripts/restore-opencode-config.sh
+      - name: Install OpenCode
+        run: ./.github/scripts/install-opencode.sh
 
       - name: Configure git author
         run: |

@@ -19,10 +19,7 @@ jobs:
           token: ${{ secrets.MASTER_GITHUB_TOKEN }}
 
       - name: Install OpenCode
-        run: curl -fsSL https://opencode.ai/install | bash
-          
-      - name: Restore OpenCode config
-        run: ./.github/scripts/restore-opencode-config.sh
+        run: ./.github/scripts/install-opencode.sh
 
       - name: Configure git author
         run: |
