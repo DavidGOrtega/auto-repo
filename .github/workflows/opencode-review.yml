@@ -44,6 +44,7 @@ jobs:
         run: |
           export PATH="$HOME/.opencode/bin:$PATH"
           pr_number=${{ github.event.pull_request.number }}
+          pr_author=${{ github.event.pull_request.user.login }}
           prompt_file=$(mktemp)
           review_file=$(mktemp)
           cat > "$prompt_file" <<'EOF'
@@ -78,6 +79,8 @@ jobs:
 
           if ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); exit(payload["status"] == "lgtm" ? 0 : 1)' "$review_file.payload"; then
             gh pr review "$pr_number" --approve --body-file "$review_file"
+          elif [ "$pr_author" = "${{ github.repository_owner }}" ]; then
+            gh pr comment "$pr_number" --body-file "$review_file"
           else
             gh pr review "$pr_number" --request-changes --body-file "$review_file"
           fi
