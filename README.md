@@ -20,7 +20,6 @@ When you run `oc-init`, it:
 - updates `.gitignore` by appending `.worktrees` only when that entry is missing
 - writes `*.oc-init-new` files for existing managed files other than `AGENTS.md`, unless you pass `--force`
 - creates or updates the `bug` label through `gh`
-- uploads the `OPENCODE_AUTH_JSON` secret from `~/.local/share/opencode/auth.json`
 - uploads the `ZAI_API_KEY` secret extracted from `~/.config/opencode/opencode.json`
 - enables GitHub Actions workflow write permissions and pull request approval permissions
 - configures repository merge settings for squash-merge flow and branch cleanup
@@ -49,7 +48,6 @@ That command assumes:
 - you run it inside the target git repository, even from a nested folder
 - `gh` is already authenticated for that repository
 - `opencode` is installed locally
-- `~/.local/share/opencode/auth.json` exists on your machine
 - `~/.config/opencode/opencode.json` exists with the ZCode provider API key
 
 Include the scheduled review workflow when you want it:

@@ -58,14 +58,30 @@ run_oc_init() {
   "$OC_INIT" "$temp_dir/target" "$@" >/dev/null
 }
 
+write_opencode_config() {
+  local home_dir=$1
+
+  mkdir -p -- "$home_dir/.config/opencode"
+  cat <<'EOF' > "$home_dir/.config/opencode/opencode.json"
+{
+  "provider": {
+    "ZCode": {
+      "options": {
+        "apiKey": "test-key"
+      }
+    }
+  }
+}
+EOF
+}
+
 test_installs_default_workflows() {
   local temp_dir
   temp_dir=$(mktemp -d)
   trap 'rm -rf -- "$temp_dir"' RETURN
 
-  mkdir -p -- "$temp_dir/home/.local/share/opencode"
-  printf '{}' > "$temp_dir/home/.local/share/opencode/auth.json"
   make_stub_bin "$temp_dir/bin"
+  write_opencode_config "$temp_dir/home"
   make_target_repo "$temp_dir/target"
 
   run_oc_init "$temp_dir"
@@ -80,9 +96,8 @@ test_installs_scheduled_workflow_only_with_flag() {
   temp_dir=$(mktemp -d)
   trap 'rm -rf -- "$temp_dir"' RETURN
 
-  mkdir -p -- "$temp_dir/home/.local/share/opencode"
-  printf '{}' > "$temp_dir/home/.local/share/opencode/auth.json"
   make_stub_bin "$temp_dir/bin"
+  write_opencode_config "$temp_dir/home"
   make_target_repo "$temp_dir/target"
 
   run_oc_init "$temp_dir" --with-scheduled

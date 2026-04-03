@@ -16,14 +16,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Restore OpenCode credentials
-        env:
-          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
-        run: |
-          mkdir -p "$HOME/.local/share/opencode"
-          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
-          chmod 600 "$HOME/.local/share/opencode/auth.json"
-
       - name: Restore OpenCode config
         run: ./.github/scripts/restore-opencode-config.sh
 
