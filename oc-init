@@ -21,7 +21,7 @@ If TARGET_REPO points at a subdirectory inside a git repository, oc-init
 installs into that repository root.
 
 Options:
-  --with-scheduled  Include the scheduled review workflow.
+  --with-scheduled  Include the scheduled repository review workflow.
   --force           Overwrite managed target files instead of writing *.oc-init-new merge copies.
   --source-base-url Download bootstrap files from this base URL when they are not available locally.
   -h, --help        Show this help text.
@@ -546,6 +546,7 @@ REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 install_prerequisite_bootstrap_files
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
+copy_file '.github/workflows/opencode-review.yml' "$TARGET_REPO/.github/workflows/opencode-review.yml"
 
 if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
   copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"

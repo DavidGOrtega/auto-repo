@@ -15,7 +15,7 @@ This repository is the bootstrap source for that command.
 When you run `oc-init`, it:
 
 - resolves the target repo to the git root, even if you launch it from a nested folder
-- reconciles `AGENTS.md`, `opencode.json`, and copies `.github/workflows/opencode.yml`
+- reconciles `AGENTS.md`, `opencode.json`, and copies `.github/workflows/opencode.yml` plus `.github/workflows/opencode-review.yml`
 - optionally copies `.github/workflows/opencode-scheduled.yml` when you pass `--with-scheduled`
 - updates `.gitignore` by appending `.worktrees` only when that entry is missing
 - writes `*.oc-init-new` files for existing managed files other than `AGENTS.md` and `opencode.json`, unless you pass `--force`
@@ -30,7 +30,8 @@ By default, existing repository content stays in place. `AGENTS.md` is reconcile
 
 - `AGENTS.md` reconciled with repository workflow and contribution guidance for OpenCode sessions.
 - `opencode.json` merged so the `superpowers` OpenCode plugin stays enabled alongside repo-specific config.
-- `.github/workflows/opencode.yml` to run OpenCode from issue comments and PR review activity.
+- `.github/workflows/opencode.yml` to run OpenCode from issue comments.
+- `.github/workflows/opencode-review.yml` to run OpenCode on pull request review activity.
 - `.github/workflows/opencode-scheduled.yml` to perform scheduled repository reviews.
 - `.gitignore` updated to include the local `.worktrees` convention used by the branching guide.
 - GitHub labels, secret, workflow permissions, PR approval permissions, and merge settings configured through `gh`.
