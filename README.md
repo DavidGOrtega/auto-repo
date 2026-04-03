@@ -15,7 +15,7 @@ This repository is the bootstrap source for that command.
 When you run `oc-init`, it:
 
 - resolves the target repo to the git root, even if you launch it from a nested folder
-- reconciles `AGENTS.md`, `opencode.json`, and copies `.github/workflows/opencode.yml`
+- reconciles `AGENTS.md`, `opencode.json`, and copies `.github/workflows/opencode.yml` plus `.github/workflows/opencode-review.yml`
 - optionally copies `.github/workflows/opencode-scheduled.yml` when you pass `--with-scheduled`
 - updates `.gitignore` by appending `.worktrees` only when that entry is missing
 - writes `*.oc-init-new` files for existing managed files other than `AGENTS.md` and `opencode.json`, unless you pass `--force`

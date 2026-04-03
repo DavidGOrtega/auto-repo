@@ -21,7 +21,7 @@ If TARGET_REPO points at a subdirectory inside a git repository, oc-init
 installs into that repository root.
 
 Options:
-  --with-scheduled  Include the scheduled review workflow.
+  --with-scheduled  Include the scheduled repository review workflow.
   --force           Overwrite managed target files instead of writing *.oc-init-new merge copies.
   --source-base-url Download bootstrap files from this base URL when they are not available locally.
   -h, --help        Show this help text.
@@ -170,6 +170,25 @@ resolve_source_path() {
   printf '%s\n' "$fetched_path"
 }
 
+resolve_managed_source_path() {
+  local relative_path=$1
+  local script_root
+  local target_root
+  local fetched_path="$TEMP_DIR/bootstrap_${relative_path//\//__}"
+
+  script_root=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$SCRIPT_DIR")
+  target_root=$(git -C "$TARGET_REPO" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$TARGET_REPO")
+
+  if [ "$script_root" = "$target_root" ]; then
+    command -v curl >/dev/null 2>&1 || fail 'curl is required when oc-init runs from inside the target repository'
+    curl -fsSL "${SOURCE_BASE_URL%/}/$relative_path" -o "$fetched_path" || fail "failed to download: ${SOURCE_BASE_URL%/}/$relative_path"
+    printf '%s\n' "$fetched_path"
+    return
+  fi
+
+  resolve_source_path "$relative_path"
+}
+
 copy_file() {
   local relative_path=$1
   local target_path=$2
@@ -177,7 +196,7 @@ copy_file() {
   local source_path
   local existed_before='false'
 
-  source_path=$(resolve_source_path "$relative_path")
+  source_path=$(resolve_managed_source_path "$relative_path")
 
   target_dir=$(dirname -- "$target_path")
   mkdir -p -- "$target_dir"
@@ -208,7 +227,7 @@ merge_opencode_json() {
   local merged_path="$TEMP_DIR/opencode.json.merged"
   local existed_before='false'
 
-  source_path=$(resolve_source_path 'opencode.json')
+  source_path=$(resolve_managed_source_path 'opencode.json')
 
   mkdir -p -- "$(dirname -- "$target_path")"
 
@@ -304,7 +323,7 @@ reconcile_agents_md() {
   local reconciled_path="$TEMP_DIR/AGENTS.md.reconciled"
   local existed_before='false'
 
-  source_path=$(resolve_source_path 'AGENTS.md')
+  source_path=$(resolve_managed_source_path 'AGENTS.md')
 
   mkdir -p -- "$(dirname -- "$target_path")"
 
@@ -546,6 +565,7 @@ REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 install_prerequisite_bootstrap_files
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
+copy_file '.github/workflows/opencode-review.yml' "$TARGET_REPO/.github/workflows/opencode-review.yml"
 
 if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
   copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
