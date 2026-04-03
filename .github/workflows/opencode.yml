@@ -56,9 +56,25 @@ jobs:
           printf '%s\n' 'Manual /coder is only supported for pull requests from branches in this repository.' >&2
           exit 1
 
+      - name: Resolve checkout ref
+        id: checkout_ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "${{ github.event.pull_request }}" ]; then
+            printf 'ref=%s\n' "${{ github.event.pull_request.head.ref }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.issue.pull_request }}" ]; then
+            pr_number="${{ github.event.issue.number }}"
+            head_ref=$(gh api "repos/${{ github.repository }}/pulls/${pr_number}" --jq '.head.ref')
+            printf 'ref=%s\n' "$head_ref" >> "$GITHUB_OUTPUT"
+          else
+            printf 'ref=%s\n' "${{ github.event.repository.default_branch }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          ref: ${{ steps.checkout_ref.outputs.ref }}
           fetch-depth: 0
           token: ${{ secrets.MASTER_GITHUB_TOKEN }}
 
@@ -70,8 +86,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Mark coder commits
+      - name: Configure git hooks
         run: |
+          # commit-msg hook: mark coder commits
           hook=.git/hooks/commit-msg
           printf '%s\n' '#!/bin/sh' > "$hook"
           printf '%s\n' 'msg_file="$1"' >> "$hook"
@@ -79,6 +96,31 @@ jobs:
           printf '%s\n' '  exit 0' >> "$hook"
           printf '%s\n' 'fi' >> "$hook"
           printf '%s\n' 'printf "\nBy: coder\n" >> "$msg_file"' >> "$hook"
+          chmod +x "$hook"
+
+          # pre-push hook: pull from origin before every push
+          hook=.git/hooks/pre-push
+          printf '%s\n' '#!/bin/sh' > "$hook"
+          printf '%s\n' 'branch=$(git rev-parse --abbrev-ref HEAD)' >> "$hook"
+          printf '%s\n' 'if [ "$branch" = "master" ] || [ "$branch" = "main" ]; then' >> "$hook"
+          printf '%s\n' '  echo "ERROR: Direct pushes to $branch are not allowed. Create a feature branch first."' >> "$hook"
+          printf '%s\n' '  exit 1' >> "$hook"
+          printf '%s\n' 'fi' >> "$hook"
+          printf '%s\n' 'if [ "$branch" != "HEAD" ]; then' >> "$hook"
+          printf '%s\n' '  git fetch origin "$branch" 2>/dev/null || true' >> "$hook"
+          printf '%s\n' '  remote_sha=$(git rev-parse "origin/$branch" 2>/dev/null || true)' >> "$hook"
+          printf '%s\n' '  if [ -n "$remote_sha" ]; then' >> "$hook"
+          printf '%s\n' '    local_sha=$(git rev-parse HEAD)' >> "$hook"
+          printf '%s\n' '    if [ "$local_sha" != "$remote_sha" ]; then' >> "$hook"
+          printf '%s\n' '      echo "Remote branch has new commits. Pulling origin/$branch..."' >> "$hook"
+          printf '%s\n' '      if ! git pull --no-edit origin "$branch"; then' >> "$hook"
+          printf '%s\n' '        echo "ERROR: Merge conflicts with origin/$branch. Resolve before pushing."' >> "$hook"
+          printf '%s\n' '        exit 1' >> "$hook"
+          printf '%s\n' '      fi' >> "$hook"
+          printf '%s\n' '    fi' >> "$hook"
+          printf '%s\n' '  fi' >> "$hook"
+          printf '%s\n' 'fi' >> "$hook"
+          printf '%s\n' 'exit 0' >> "$hook"
           chmod +x "$hook"
 
       - name: Run OpenCode
