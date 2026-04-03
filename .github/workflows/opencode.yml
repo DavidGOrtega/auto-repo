@@ -89,3 +89,4 @@ jobs:
         with:
           mentions: /coder
           use_github_token: true
+          model: ZCode/glm-5.1
