@@ -546,6 +546,7 @@ REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 install_prerequisite_bootstrap_files
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
+copy_file '.github/workflows/opencode-review.yml' "$TARGET_REPO/.github/workflows/opencode-review.yml"
 
 if [ "$INCLUDE_SCHEDULED" = 'true' ]; then
   copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
