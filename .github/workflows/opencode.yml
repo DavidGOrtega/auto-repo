@@ -40,6 +40,22 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      - name: Check PR source repository
+        if: github.event.issue.pull_request || github.event.pull_request
+        id: pr_source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr_number=${{ github.event.issue.number || github.event.pull_request.number }}
+          same_repo=$(gh api repos/${{ github.repository }}/pulls/$pr_number --jq '.head.repo.full_name == .base.repo.full_name')
+          printf 'same_repo=%s\n' "$same_repo" >> "$GITHUB_OUTPUT"
+
+      - name: Reject fork PR coder commands
+        if: (github.event.issue.pull_request || github.event.pull_request) && steps.pr_source.outputs.same_repo != 'true'
+        run: |
+          printf '%s\n' 'Manual /coder is only supported for pull requests from branches in this repository.' >&2
+          exit 1
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
