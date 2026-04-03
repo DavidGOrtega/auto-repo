@@ -17,6 +17,9 @@ jobs:
         with:
           fetch-depth: 1
           token: ${{ secrets.MASTER_GITHUB_TOKEN }}
+
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
           
       - name: Restore OpenCode config
         run: ./.github/scripts/restore-opencode-config.sh
@@ -26,29 +29,58 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - uses: anomalyco/opencode/github@latest
+      - name: Run OpenCode reviewer
         env:
           GITHUB_TOKEN: ${{ secrets.MASTER_GITHUB_TOKEN }}
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-        with:
-          model: ZCode/glm-5.1
-          use_github_token: true
-          prompt: |
-            You have Superpowers. Use them to review this pull request.
+          OPENCODE_PERMISSION: |
+            {
+              "bash": {
+                "*": "deny",
+                "gh pr view *": "allow"
+              },
+              "webfetch": "deny"
+            }
+        run: |
+          export PATH="$HOME/.opencode/bin:$PATH"
+          pr_number=${{ github.event.pull_request.number }}
+          pr_author=${{ github.event.pull_request.user.login }}
+          prompt_file=$(mktemp)
+          review_file=$(mktemp)
+          cat > "$prompt_file" <<'EOF'
+          You have Superpowers. Use them to review pull request #PR_NUMBER#.
 
-            Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
-            Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
-            Use existing pull request comments and reviews as context when they are relevant to a re-review.
+          Review only the current pull request diff. Use repository context only when it is necessary to understand the diff.
+          Do not request changes outside the scope of the pull request. Ask for follow-up issues instead.
+          Use existing pull request comments and reviews as context when they are relevant to a re-review.
 
-            Review requirements:
-            1. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
-            2. Re-review Behavior:
-              - If this pull request was already reviewed before, focus on whether previously requested changes were resolved.
-              - Do not restate the full prior review unless it is necessary.
-              - Mention only newly found issues or confirm that previous issues are resolved.
-            3. Output:
-              - Every review must start with a first line exactly in the form `# REVIEW <sha>` where `<sha>` is the commit being reviewed.
-              - If changes are required, after the title write a short enumerated list of precise requested fixes and end with `/coder fix this`.
-              - If the pull request is acceptable, after the title write at most two short sentences, do not use bullets, do not include cosmetic notes, and end with `LGTM`.
-              - Keep the review concise and avoid repeating the full diff.
-              - If you have already reviewed the pull request 5 times or more, stop and defer to another reviewer.
+          Use GitHub CLI commands only to inspect the pull request. Do not submit the review yourself. Do not post issue comments. Do not post multiple reviews.
+
+          Review requirements:
+          1. Scope Control: reject out-of-scope changes and ask for follow-up issues instead.
+          2. Re-review Behavior:
+            - If this pull request was already reviewed before, focus on whether previously requested changes were resolved.
+            - Do not restate the full prior review unless it is necessary.
+            - Mention only newly found issues or confirm that previous issues are resolved.
+            - Inspect the commit message for the commit being reviewed and determine whether it contains the exact trailer `By: coder`.
+          3. Output:
+            - Return only one valid JSON object with the keys `commit`, `status`, `summary`, and `allow_coder`.
+            - `commit` must be the actual reviewed commit SHA, not a placeholder.
+            - `status` must be `lgtm` only when the pull request is acceptable.
+            - `summary` must contain 1-2 short sentences for `lgtm`, or a short list of precise requested fixes for `changes_requested`.
+            - `allow_coder` must be true only when the reviewed commit includes `By: coder`.
+            - Do not include markdown fences or any extra text before or after the JSON object.
+          EOF
+          perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
+          opencode run --format json -m ZCode/glm-5.1 "$(cat "$prompt_file")" > "$review_file.json"
+          ruby -rjson -e 'text = File.readlines(ARGV[0]).filter_map { |line| event = JSON.parse(line) rescue nil; part = event && event["part"]; part && part["type"] == "text" ? part["text"] : nil }.join("\n").strip; abort("No review payload produced") if text.empty?; payload = nil; text.scan(/\{.*?\}/m).reverse_each do |candidate|; begin; parsed = JSON.parse(candidate); next unless parsed.is_a?(Hash); next unless parsed["commit"].to_s.match?(/^[0-9a-f]{7,40}$/); next unless ["lgtm", "changes_requested"].include?(parsed["status"]); next unless parsed["summary"].is_a?(Array) && parsed["summary"].all? { |item| item.is_a?(String) && !item.strip.empty? }; next unless parsed["allow_coder"] == true || parsed["allow_coder"] == false; payload = parsed; break; rescue JSON::ParserError; end; end; abort("No valid review JSON found") unless payload; File.write(ARGV[1], JSON.dump(payload))' "$review_file.json" "$review_file.payload"
+
+          ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); lines = ["# REVIEW #{payload.fetch("commit")}", ""]; if payload.fetch("status") == "lgtm"; abort("LGTM summary must be 1-2 items") unless payload.fetch("summary").length.between?(1, 2); lines.concat(payload.fetch("summary")); lines << "LGTM"; else payload.fetch("summary").each_with_index { |item, idx| lines << "#{idx + 1}. #{item}" }; lines << "/coder fix this" if payload.fetch("allow_coder"); end; File.write(ARGV[1], lines.join("\n") + "\n")' "$review_file.payload" "$review_file"
+
+          if [ "$pr_author" = "${{ github.repository_owner }}" ]; then
+            gh pr comment "$pr_number" --body-file "$review_file"
+          elif ruby -rjson -e 'payload = JSON.parse(File.read(ARGV[0])); exit(payload["status"] == "lgtm" ? 0 : 1)' "$review_file.payload"; then
+            gh pr review "$pr_number" --approve --body-file "$review_file"
+          else
+            gh pr review "$pr_number" --request-changes --body-file "$review_file"
+          fi

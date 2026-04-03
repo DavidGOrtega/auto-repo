@@ -30,7 +30,7 @@ By default, existing repository content stays in place. `AGENTS.md` is reconcile
 
 - `AGENTS.md` reconciled with repository workflow and contribution guidance for OpenCode sessions.
 - `.github/workflows/opencode.yml` to run OpenCode from issue comments.
-- `.github/workflows/opencode-review.yml` to run OpenCode on pull request review activity.
+- `.github/workflows/opencode-review.yml` to run reviewer automation on pull requests.
 - `.github/workflows/opencode-scheduled.yml` to perform scheduled repository reviews.
 - `.gitignore` updated to include the local `.worktrees` convention used by the branching guide.
 - GitHub labels, secrets, workflow permissions, PR approval permissions, and merge settings configured through `gh`.
@@ -111,6 +111,7 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 - `oc-init` now requires the local `opencode` CLI so it can reconcile `AGENTS.md` before applying repository-side GitHub configuration.
 - `oc-init` uploads the ZCode API key as the `ZAI_API_KEY` GitHub secret. The workflow config uses `{env:ZAI_API_KEY}` so the key is never committed to the repository.
 - Git author configuration is handled inside the workflows so automation can create commits when needed.
+- Commits created by the `/coder` workflow are tagged with the commit trailer `By: coder` so reviewer automation can tell when a follow-up `/coder fix this` is valid.
 - `oc-init` configures the repository so GitHub Actions can create and approve pull requests.
 - OpenCode uses the default `GITHUB_TOKEN` by default, but if you need workflow-triggered PR creation or chained automation between workflows, a dedicated higher-privilege token may still be required.
 - The scheduled workflow is optional; add it with `./oc-init --with-scheduled` or `bash -s -- --with-scheduled` if you want automated periodic repository reviews.
