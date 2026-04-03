@@ -24,61 +24,68 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - uses: anomalyco/opencode/github@latest
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Run OpenCode triage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-        with:
-          model: ZCode/glm-5.1
-          use_github_token: true
-          prompt: |
-            A new issue was just opened. Perform the following tasks, then post a SINGLE comment if needed.
+        run: |
+          export PATH="$HOME/.opencode/bin:$PATH"
+          prompt_file=$(mktemp)
+          cat > "$prompt_file" <<'EOF'
+          A new issue was just opened. Perform the following tasks, then post a SINGLE comment if needed.
 
-            First, fetch the issue details:
-            gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }}
+          First, fetch the issue details:
+          gh issue view ISSUE_NUMBER --repo REPOSITORY
 
-            ---
+          ---
 
-            TASK 1: FIND RELATED ISSUES
+          TASK 1: FIND RELATED ISSUES
 
-            Search existing open issues for duplicates or related issues (exclude #${{ github.event.issue.number }}).
-            Use: gh issue list --repo ${{ github.repository }} --state open --limit 50
-            Then view promising candidates with: gh issue view <number> --repo ${{ github.repository }}
+          Search existing open issues for duplicates or related issues (exclude #ISSUE_NUMBER).
+          Use: gh issue list --repo REPOSITORY --state open --limit 50
+          Then view promising candidates with: gh issue view <number> --repo REPOSITORY
 
-            Look for:
-            1. Similar titles or descriptions
-            2. Same error messages or symptoms
-            3. Related functionality or components
-            4. Similar feature requests
+          Look for:
+          1. Similar titles or descriptions
+          2. Same error messages or symptoms
+          3. Related functionality or components
+          4. Similar feature requests
 
-            ---
+          ---
 
-            TASK 2: DETECT CONFIGURATION QUESTIONS
+          TASK 2: DETECT CONFIGURATION QUESTIONS
 
-            Determine if this issue is a question about configuration, installation, setup, or usage rather than a bug report or feature request.
+          Determine if this issue is a question about configuration, installation, setup, or usage rather than a bug report or feature request.
 
-            If it IS a configuration question:
-            1. Search the repository for relevant documentation (README.md, docs/, CONTRIBUTING.md, etc.)
-            2. Provide a direct, helpful answer based on the actual documentation
-            3. Link to the specific documentation files or sections that are relevant
+          If it IS a configuration question:
+          1. Search the repository for relevant documentation (README.md, docs/, CONTRIBUTING.md, etc.)
+          2. Provide a direct, helpful answer based on the actual documentation
+          3. Link to the specific documentation files or sections that are relevant
 
-            ---
+          ---
 
-            POSTING YOUR COMMENT:
+          POSTING YOUR COMMENT:
 
-            Post at most ONE comment on issue #${{ github.event.issue.number }} combining all findings.
-            Use gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body "<comment>"
+          Post at most ONE comment on issue #ISSUE_NUMBER combining all findings.
+          Use gh issue comment ISSUE_NUMBER --repo REPOSITORY --body "<comment>"
 
-            Build the comment as follows:
+          Build the comment as follows:
 
-            If duplicates/related issues were found, include a section:
-            **Related issues:**
-            This issue might be related to existing issues. Please check:
-            - #[issue_number]: [brief description of similarity]
+          If duplicates/related issues were found, include a section:
+          **Related issues:**
+          This issue might be related to existing issues. Please check:
+          - #[issue_number]: [brief description of similarity]
 
-            If it is a configuration question, include a section with direct help:
-            **Quick answer:**
-            [Your helpful answer based on the repo documentation]
-            For more details, see [link to relevant doc file].
+          If it is a configuration question, include a section with direct help:
+          **Quick answer:**
+          [Your helpful answer based on the repo documentation]
+          For more details, see [link to relevant doc file].
 
-            If neither duplicates were found AND it is not a configuration question, do NOT comment at all.
+          If neither duplicates were found AND it is not a configuration question, do NOT comment at all.
+          EOF
+          sed -i "s/ISSUE_NUMBER/${{ github.event.issue.number }}/g" "$prompt_file"
+          sed -i "s|REPOSITORY|${{ github.repository }}|g" "$prompt_file"
+          opencode run --format json -m ZCode/glm-5.1 "$(cat "$prompt_file")"
