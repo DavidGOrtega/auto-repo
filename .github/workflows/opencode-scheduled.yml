@@ -30,7 +30,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         with:
-          model: ZCode/glm-5.1
           use_github_token: true
           prompt: |
             Review the codebase for bugs, broken behavior, missing error handling, and TODO comments.
