@@ -107,7 +107,21 @@ test_installs_scheduled_workflow_only_with_flag() {
   assert_exists "$temp_dir/target/.github/workflows/opencode-scheduled.yml"
 }
 
+test_triage_workflow_uses_shared_opencode_config() {
+  local workflow_path
+
+  workflow_path="$REPO_ROOT/.github/workflows/triage.yml"
+
+  grep -Fq 'Restore OpenCode credentials' "$workflow_path" && \
+    fail 'triage workflow should not restore auth.json credentials'
+  grep -Fq 'OPENCODE_AUTH_JSON' "$workflow_path" && \
+    fail 'triage workflow should not reference OPENCODE_AUTH_JSON'
+  grep -Fq '.github/scripts/restore-opencode-config.sh' "$workflow_path" || \
+    fail 'triage workflow should use the shared restore-opencode-config.sh script'
+}
+
 test_installs_default_workflows
 test_installs_scheduled_workflow_only_with_flag
+test_triage_workflow_uses_shared_opencode_config
 
 printf 'PASS: oc-init workflow installation\n'

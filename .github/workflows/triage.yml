@@ -16,40 +16,8 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore OpenCode credentials
-        env:
-          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
-        run: |
-          mkdir -p "$HOME/.local/share/opencode"
-          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
-          chmod 600 "$HOME/.local/share/opencode/auth.json"
-
       - name: Restore OpenCode config
-        run: |
-          mkdir -p "$HOME/.config/opencode"
-          cat > "$HOME/.config/opencode/opencode.json" <<'CONFIG'
-          {
-            "$schema": "https://opencode.ai/config.json",
-            "plugin": [
-              "superpowers@git+https://github.com/obra/superpowers.git"
-            ],
-            "provider": {
-              "ZCode": {
-                "npm": "@ai-sdk/openai-compatible",
-                "name": "Z.ai coder plan",
-                "options": {
-                  "baseURL": "https://api.z.ai/api/coding/paas/v4",
-                  "apiKey": "{env:ZAI_API_KEY}"
-                },
-                "models": {
-                  "glm-5.1": {
-                    "name": "GLM 5.1"
-                  }
-                }
-              }
-            }
-          }
-          CONFIG
+        run: ./.github/scripts/restore-opencode-config.sh
 
       - name: Configure git author
         run: |
