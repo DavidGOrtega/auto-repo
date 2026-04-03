@@ -16,13 +16,8 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore OpenCode credentials
-        env:
-          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
-        run: |
-          mkdir -p "$HOME/.local/share/opencode"
-          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
-          chmod 600 "$HOME/.local/share/opencode/auth.json"
+      - name: Restore OpenCode config
+        run: ./.github/scripts/restore-opencode-config.sh
 
       - name: Configure git author
         run: |
@@ -32,8 +27,9 @@ jobs:
       - uses: anomalyco/opencode/github@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         with:
-          model: github-copilot/gpt-5.4
+          model: ZCode/glm-5.1
           use_github_token: true
           prompt: |
             A new issue was just opened. Perform the following tasks, then post a SINGLE comment if needed.
