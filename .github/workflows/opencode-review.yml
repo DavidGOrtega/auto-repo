@@ -34,7 +34,10 @@ jobs:
             {
               "bash": {
                 "*": "deny",
-                "gh pr view *": "allow"
+                "gh pr view *": "allow",
+                "gh pr diff *": "allow",
+                "gh pr list *": "allow",
+                "gh api *": "allow"
               },
               "webfetch": "deny"
             }
@@ -72,4 +75,8 @@ jobs:
           EOF
           perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
           opencode run -m ZCode/glm-5.1 "$(cat "$prompt_file")" > "$review_file"
-          gh pr comment "$pr_number" --body-file "$review_file"
+          if [ -s "$review_file" ]; then
+            gh pr comment "$pr_number" --body-file "$review_file"
+          else
+            echo "::warning::Review file was empty, skipping comment"
+          fi
