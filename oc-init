@@ -264,12 +264,27 @@ PY
   printf 'configured: repository merge settings\n'
 }
 
+ensure_worktrees_dir() {
+  local worktrees_dir="$TARGET_REPO/$WORKTREE_IGNORE_ENTRY"
+  local gitkeep="$worktrees_dir/.gitkeep"
+
+  if [ -f "$gitkeep" ]; then
+    printf 'unchanged: %s/.gitkeep already exists\n' "$worktrees_dir"
+    return
+  fi
+
+  mkdir -p -- "$worktrees_dir"
+  touch -- "$gitkeep"
+  printf 'created: %s/.gitkeep\n' "$worktrees_dir"
+}
+
 ORIGIN_URL=$(git -C "$TARGET_REPO" remote get-url origin 2>/dev/null || true)
 [ -n "$ORIGIN_URL" ] || fail 'target repository must have an origin remote'
 REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 
 install_prerequisite_bootstrap_files
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
+ensure_worktrees_dir
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
 copy_file '.github/workflows/opencode-review.yml' "$TARGET_REPO/.github/workflows/opencode-review.yml"
 
