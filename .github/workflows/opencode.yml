@@ -92,6 +92,12 @@ jobs:
           ref: ${{ steps.checkout_ref.outputs.ref }}
           fetch-depth: 0
           token: ${{ secrets.MASTER_GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Configure git authentication
+        run: |
+          token_base64=$(printf 'x-access-token:%s' "${{ secrets.MASTER_GITHUB_TOKEN }}" | base64)
+          git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic ${token_base64}"
 
       - name: Install OpenCode
         run: ./.github/scripts/install-opencode.sh
@@ -103,7 +109,6 @@ jobs:
 
       - name: Configure git hooks
         run: |
-          # commit-msg hook: mark coder commits
           hook=.git/hooks/commit-msg
           printf '%s\n' '#!/bin/sh' > "$hook"
           printf '%s\n' 'msg_file="$1"' >> "$hook"
@@ -113,30 +118,12 @@ jobs:
           printf '%s\n' 'printf "\nBy: coder\n" >> "$msg_file"' >> "$hook"
           chmod +x "$hook"
 
-          # pre-push hook: pull from origin before every push
           hook=.git/hooks/pre-push
           printf '%s\n' '#!/bin/sh' > "$hook"
           printf '%s\n' 'branch=$(git rev-parse --abbrev-ref HEAD)' >> "$hook"
           printf '%s\n' 'if [ "$branch" = "master" ] || [ "$branch" = "main" ]; then' >> "$hook"
           printf '%s\n' '  echo "ERROR: Direct pushes to $branch are not allowed. Create a feature branch first."' >> "$hook"
           printf '%s\n' '  exit 1' >> "$hook"
-          printf '%s\n' 'fi' >> "$hook"
-          printf '%s\n' 'if [ "$branch" != "HEAD" ]; then' >> "$hook"
-          printf '%s\n' '  remote_sha=$(git rev-parse "origin/$branch" 2>/dev/null || true)' >> "$hook"
-          printf '%s\n' '  if [ -n "$remote_sha" ]; then' >> "$hook"
-          printf '%s\n' '    git fetch origin "$branch" 2>/dev/null || true' >> "$hook"
-          printf '%s\n' '    remote_sha=$(git rev-parse "origin/$branch" 2>/dev/null || true)' >> "$hook"
-          printf '%s\n' '  fi' >> "$hook"
-          printf '%s\n' '  if [ -n "$remote_sha" ]; then' >> "$hook"
-          printf '%s\n' '    local_sha=$(git rev-parse HEAD)' >> "$hook"
-          printf '%s\n' '    if [ "$local_sha" != "$remote_sha" ]; then' >> "$hook"
-          printf '%s\n' '      echo "Remote branch has new commits. Pulling origin/$branch..."' >> "$hook"
-          printf '%s\n' '      if ! git pull --no-edit origin "$branch"; then' >> "$hook"
-          printf '%s\n' '        echo "ERROR: Merge conflicts with origin/$branch. Resolve before pushing."' >> "$hook"
-          printf '%s\n' '        exit 1' >> "$hook"
-          printf '%s\n' '      fi' >> "$hook"
-          printf '%s\n' '    fi' >> "$hook"
-          printf '%s\n' '  fi' >> "$hook"
           printf '%s\n' 'fi' >> "$hook"
           printf '%s\n' 'exit 0' >> "$hook"
           chmod +x "$hook"
