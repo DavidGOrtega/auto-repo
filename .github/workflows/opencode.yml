@@ -33,9 +33,14 @@ jobs:
       - name: Parse per-invocation timeout
         id: parse_timeout
         run: |
-          body="${{ github.event.comment.body || github.event.review.body || github.event.pull_request.body || '' }}"
-          if echo "$body" | grep -qoE 'timeout[= ]+[0-9]+'; then
-            value=$(echo "$body" | grep -oE 'timeout[= ]+[0-9]+' | grep -oE '[0-9]+' | head -1)
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            body=$(jq -r '.review.body // ""' "$GITHUB_EVENT_PATH")
+          else
+            body=$(jq -r '.comment.body // .pull_request.body // ""' "$GITHUB_EVENT_PATH")
+          fi
+
+          if printf '%s' "$body" | grep -qoE 'timeout[= ]+[0-9]+'; then
+            value=$(printf '%s' "$body" | grep -oE 'timeout[= ]+[0-9]+' | grep -oE '[0-9]+' | head -1)
             printf 'timeout=%s\n' "$value" >> "$GITHUB_OUTPUT"
           fi
 
