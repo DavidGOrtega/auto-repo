@@ -9,31 +9,41 @@ on:
     types: [created]
 
 jobs:
-  coder:
+  parse-invocation:
     if: |
       (
         github.event_name == 'issue_comment' &&
-        (
-          contains(github.event.comment.body, '/coder')
-        ) &&
+        contains(github.event.comment.body, '/coder') &&
         contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
       ) ||
       (
         github.event_name == 'pull_request_review' &&
-        (
-          contains(github.event.review.body, '/coder')
-        ) &&
+        contains(github.event.review.body, '/coder') &&
         contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)
       ) ||
       (
         github.event_name == 'pull_request_review_comment' &&
-        (
-          contains(github.event.comment.body, '/coder')
-        ) &&
+        contains(github.event.comment.body, '/coder') &&
         contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    outputs:
+      timeout: ${{ steps.parse_timeout.outputs.timeout }}
+    steps:
+      - name: Parse per-invocation timeout
+        id: parse_timeout
+        run: |
+          body="${{ github.event.comment.body || github.event.review.body || github.event.pull_request.body || '' }}"
+          if echo "$body" | grep -qoE 'timeout[= ]+[0-9]+'; then
+            value=$(echo "$body" | grep -oE 'timeout[= ]+[0-9]+' | grep -oE '[0-9]+' | head -1)
+            printf 'timeout=%s\n' "$value" >> "$GITHUB_OUTPUT"
+          fi
+
+  coder:
+    needs: parse-invocation
+    if: needs.parse-invocation.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ needs.parse-invocation.outputs.timeout || 20 }}
     permissions:
       id-token: write
       contents: write

@@ -104,6 +104,19 @@ If you want to install from a fork or a non-default ref, pass `--source-base-url
 4. Commit the resulting files in the target repository.
 5. Open an issue or PR comment with `/coder` to verify the workflow is active.
 
+## `/coder` usage
+
+Invoke `/coder` in an issue or PR comment to trigger the workflow:
+
+```
+/coder                        # default 20-minute timeout
+/coder timeout=60             # 60-minute timeout for this run
+/coder timeout 60             # same, alternative syntax
+/coder fix this timeout=45    # timeout works anywhere in the comment body
+```
+
+The timeout is per-invocation. Add `timeout=N` (or `timeout N`) anywhere in the comment body to override the default 20 minutes for that run only.
+
 ## Notes
 
 - The workflows use repository-scoped defaults and do not depend on a hardcoded repository name.
