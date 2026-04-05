@@ -7,10 +7,11 @@ on:
 jobs:
   reviewer:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
     steps:
       - uses: actions/checkout@v6
@@ -32,10 +33,9 @@ jobs:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENCODE_PERMISSION: |
             {
-              "bash": {
-                "*": "deny",
-                "gh pr view *": "allow"
-              },
+              "bash": "allow",
+              "edit": "deny",
+              "write": "deny",
               "webfetch": "deny"
             }
         run: |
@@ -72,4 +72,8 @@ jobs:
           EOF
           perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
           opencode run -m ZCode/glm-5.1 "$(cat "$prompt_file")" > "$review_file"
-          gh pr comment "$pr_number" --body-file "$review_file"
+          if [ -s "$review_file" ]; then
+            gh pr comment "$pr_number" --body-file "$review_file"
+          else
+            echo "::warning::Review file was empty, skipping comment"
+          fi
