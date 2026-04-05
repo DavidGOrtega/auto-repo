@@ -40,7 +40,8 @@ The automation cycle consists of four workflows:
 
 - [GitHub CLI (`gh`)](https://cli.github.com/) authenticated for the target repository
 - [OpenCode](https://opencode.ai) installed locally
-- `~/.config/opencode/opencode.json` with a ZCode provider API key
+- `MASTER_GITHUB_TOKEN` — a GitHub PAT with `workflows` and `repo` permissions, set as a repository secret
+- `ZAI_API_KEY` — ZCode provider API key, set as a repository secret
 
 ### One-command install
 
@@ -62,7 +63,6 @@ Or from a local clone:
 - Copies `.agents/skills/github-flow/SKILL.md`
 - Appends `.worktrees` to `.gitignore` when missing
 - Creates the `bug` label via `gh`
-- Uploads `ZAI_API_KEY` as a GitHub secret (extracted from your local OpenCode config)
 - Enables GitHub Actions write permissions and PR approval permissions
 - Configures squash-merge with automatic branch deletion
 
@@ -70,12 +70,8 @@ Or from a local clone:
 
 ```bash
 ./oc-init ../target-repo                    # install into a different repo
-./oc-init --with-scheduled                  # include the scheduled review workflow
-./oc-init --force                           # overwrite existing managed files
 ./oc-init --source-base-url https://...     # use a custom source URL
 ```
-
-For existing managed files, `oc-init` writes `*.oc-init-new` side files by default so you can merge intentionally. Pass `--force` to replace them directly. `AGENTS.md` is always reconciled and overwritten.
 
 ### Environment variables
 
@@ -83,11 +79,9 @@ The workflows expect these secrets configured on the repository:
 
 | Secret | Source | Used by |
 |---|---|---|
-| `ZAI_API_KEY` | Auto-uploaded by `oc-init` from `~/.config/opencode/opencode.json` | All workflows — API key for the ZCode provider |
-| `MASTER_GITHUB_TOKEN` | Must be set manually — a GitHub PAT or app token with repo scope | opencode, opencode-review, opencode-scheduled — enables push, PR creation, and cross-workflow triggers |
+| `ZAI_API_KEY` | Set manually as a repository secret | All workflows — API key for the ZCode provider |
+| `MASTER_GITHUB_TOKEN` | Set manually — a GitHub PAT or app token with repo scope | opencode, opencode-review, opencode-scheduled — enables push, PR creation, and cross-workflow triggers |
 | `GITHUB_TOKEN` | Automatic GitHub Actions token | triage — sufficient for read-only issue operations |
-
-`oc-init` uploads `ZAI_API_KEY` automatically. You must add `MASTER_GITHUB_TOKEN` yourself through the repository settings (**Settings → Secrets and variables → Actions**).
 
 ## `/coder`
 
@@ -142,11 +136,3 @@ When a commit with the `By: coder` trailer is pushed, the **opencode-review** wo
     └── skills/
         └── github-flow/SKILL.md         # GitHub Flow branching skill
 ```
-
-## Notes
-
-- Workflows are repository-scoped and do not depend on a hardcoded repository name.
-- OpenCode reads the global config (`~/.config/opencode/opencode.json`) for provider and plugin settings. The workflows write this config at runtime via `install-opencode.sh`.
-- `oc-init` requires the local `opencode` CLI to reconcile `AGENTS.md`.
-- `MASTER_GITHUB_TOKEN` is needed instead of the default `GITHUB_TOKEN` when workflow-triggered PR creation or chained automation between workflows is required.
-- The scheduled workflow is optional; add it with `--with-scheduled`.
