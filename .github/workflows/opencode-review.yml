@@ -7,10 +7,11 @@ on:
 jobs:
   reviewer:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
     steps:
       - uses: actions/checkout@v6
@@ -32,13 +33,9 @@ jobs:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENCODE_PERMISSION: |
             {
-              "bash": {
-                "*": "deny",
-                "gh pr view *": "allow",
-                "gh pr diff *": "allow",
-                "gh pr list *": "allow",
-                "gh api *": "allow"
-              },
+              "bash": "allow",
+              "edit": "deny",
+              "write": "deny",
               "webfetch": "deny"
             }
         run: |
