@@ -9,7 +9,7 @@ The automation cycle consists of four workflows:
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | **opencode** | `/coder` in an issue or PR comment | Executes code changes requested in the comment |
-| **opencode-review** | PR opened, synced, or reopened | Reviews every pull request and posts feedback |
+| **opencode-review** | PR opened, synced, reopened, or marked ready for review | Reviews every pull request and posts feedback |
 | **triage** | Issue opened | Finds related issues and answers configuration questions |
 | **opencode-scheduled** | Every 12 hours (`0 */12 * * *`) | Closes stale issues and opens new ones for problems found in the codebase |
 
