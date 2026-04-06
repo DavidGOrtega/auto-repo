@@ -231,7 +231,7 @@ configure_github_repo() {
   gh label create bug --repo "$repo_slug" --color D73A4A --description "Something isn't working" --force >/dev/null
   printf 'configured: label bug\n'
 
-  if gh secret list --repo "$repo_slug" 2>/dev/null | grep -Fqx 'ZAI_API_KEY'; then
+  if gh secret list --repo "$repo_slug" 2>/dev/null | grep -Fq 'ZAI_API_KEY'; then
     printf 'configured: secret ZAI_API_KEY already set\n'
   else
     printf 'action required: set secret ZAI_API_KEY manually via: gh secret set ZAI_API_KEY --repo %s\n' "$repo_slug"
