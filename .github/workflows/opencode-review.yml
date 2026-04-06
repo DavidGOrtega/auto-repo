@@ -100,9 +100,9 @@ jobs:
           opencode run -m ZCode/glm-5.1 "$(cat "$prompt_file")" > "$review_file"
           if [ -s "$review_file" ]; then
             if grep -qE '(^|\s)LGTM(\s|$|\.|,)' "$review_file"; then
-              gh pr review "$pr_number" --approve --body-file "$review_file"
+              GH_TOKEN="${{ github.token }}" gh pr review "$pr_number" --approve --body-file "$review_file"
             else
-              gh pr review "$pr_number" --request-changes --body-file "$review_file"
+              GH_TOKEN="${{ github.token }}" gh pr review "$pr_number" --request-changes --body-file "$review_file"
             fi
           else
             echo "::warning::Review file was empty, skipping review"
