@@ -100,7 +100,33 @@ jobs:
           git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic ${token_base64}"
 
       - name: Install OpenCode
-        run: ./.github/scripts/install-opencode.sh
+        run: |
+          curl -fsSL https://opencode.ai/install | bash
+          mkdir -p "$HOME/.config/opencode"
+          cat > "$HOME/.config/opencode/opencode.json" << 'CONFIG'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "model": "ZCode/glm-5.1",
+            "plugin": [
+              "superpowers@git+https://github.com/obra/superpowers.git"
+            ],
+            "provider": {
+              "ZCode": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Z.ai coder plan",
+                "options": {
+                  "baseURL": "https://api.z.ai/api/coding/paas/v4",
+                  "apiKey": "{env:ZAI_API_KEY}"
+                },
+                "models": {
+                  "glm-5.1": {
+                    "name": "GLM 5.1"
+                  }
+                }
+              }
+            }
+          }
+          CONFIG
 
       - name: Configure git author
         run: |
