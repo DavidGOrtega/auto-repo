@@ -225,31 +225,17 @@ install_prerequisite_bootstrap_files() {
 
 configure_github_repo() {
   local repo_slug=$1
-  local zai_api_key
 
   gh auth status >/dev/null 2>&1 || fail 'gh must already be authenticated'
-  [ -f "$OPENCODE_CONFIG_PATH" ] || fail "missing OpenCode config file: $OPENCODE_CONFIG_PATH"
 
   gh label create bug --repo "$repo_slug" --color D73A4A --description "Something isn't working" --force >/dev/null
   printf 'configured: label bug\n'
 
-  zai_api_key=$(python3 - "$OPENCODE_CONFIG_PATH" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-config = json.loads(Path(sys.argv[1]).read_text())
-provider = config.get("provider", {})
-zcode = provider.get("ZCode", {})
-options = zcode.get("options", {})
-api_key = options.get("apiKey", "")
-if not api_key:
-    raise SystemExit("ZCode apiKey not found in config")
-print(api_key)
-PY
-  ) || fail "failed to extract ZAI_API_KEY from $OPENCODE_CONFIG_PATH"
-  printf '%s' "$zai_api_key" | gh secret set ZAI_API_KEY --repo "$repo_slug" >/dev/null
-  printf 'configured: secret ZAI_API_KEY\n'
+  if gh secret list --repo "$repo_slug" 2>/dev/null | grep -Fqx 'ZAI_API_KEY'; then
+    printf 'configured: secret ZAI_API_KEY already set\n'
+  else
+    printf 'action required: set secret ZAI_API_KEY manually via: gh secret set ZAI_API_KEY --repo %s\n' "$repo_slug"
+  fi
 
   gh api --method PUT "repos/$repo_slug/actions/permissions/workflow" \
     -f default_workflow_permissions=write \
@@ -281,4 +267,5 @@ configure_github_repo "$REPO_SLUG"
 
 printf '\nNext steps:\n'
 printf '1. Review the copied skill and workflow files before committing.\n'
-printf '2. Add /coder to an issue or PR thread to verify the workflow.\n'
+printf '2. Set the ZAI_API_KEY repository secret: gh secret set ZAI_API_KEY --repo %s\n' "$REPO_SLUG"
+printf '3. Add /coder to an issue or PR thread to verify the workflow.\n'
