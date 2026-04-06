@@ -54,8 +54,6 @@ require_prerequisites() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --with-scheduled)
-      ;;
     --force)
       FORCE='true'
       ;;
