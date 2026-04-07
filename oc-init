@@ -9,9 +9,6 @@ usage() {
   cat <<'EOF'
 Usage: ./oc-init [TARGET_REPO] [--force] [--source-base-url URL]
 
-Copy the OpenCode bootstrap files into an existing repository and
-configure the required GitHub repository settings.
-
 When TARGET_REPO is omitted, oc-init uses the current git repository.
 If TARGET_REPO points at a subdirectory inside a git repository, oc-init
 installs into that repository root.
@@ -248,7 +245,6 @@ REPO_SLUG=$(resolve_repo_slug "$ORIGIN_URL")
 
 install_prerequisite_bootstrap_files
 ensure_gitignore_entry "$TARGET_REPO/.gitignore"
-copy_file '.github/scripts/install-opencode.sh' "$TARGET_REPO/.github/scripts/install-opencode.sh"
 copy_file '.github/workflows/opencode.yml' "$TARGET_REPO/.github/workflows/opencode.yml"
 copy_file '.github/workflows/opencode-review.yml' "$TARGET_REPO/.github/workflows/opencode-review.yml"
 copy_file '.github/workflows/opencode-scheduled.yml' "$TARGET_REPO/.github/workflows/opencode-scheduled.yml"
