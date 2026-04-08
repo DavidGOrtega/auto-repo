@@ -99,7 +99,11 @@ jobs:
           perl -0pi -e 's/#PR_NUMBER#/'"$pr_number"'/g' "$prompt_file"
           opencode run -m ZCode/glm-5.1 "$(cat "$prompt_file")" > "$review_file"
           if [ -s "$review_file" ]; then
-            gh pr comment "$pr_number" --body-file "$review_file"
+            if grep -qE '(^|\s)LGTM(\s|$|\.|,)' "$review_file"; then
+              GH_TOKEN="${{ github.token }}" gh pr review "$pr_number" --approve --body-file "$review_file"
+            else
+              GH_TOKEN="${{ github.token }}" gh pr review "$pr_number" --request-changes --body-file "$review_file"
+            fi
           else
-            echo "::warning::Review file was empty, skipping comment"
+            echo "::warning::Review file was empty, skipping review"
           fi
