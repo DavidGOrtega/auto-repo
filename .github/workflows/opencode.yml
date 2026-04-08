@@ -48,7 +48,7 @@ jobs:
     needs: parse-invocation
     if: needs.parse-invocation.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ needs.parse-invocation.outputs.timeout || 20 }}
+    timeout-minutes: ${{ fromJSON(needs.parse-invocation.outputs.timeout || '20') }}
     permissions:
       id-token: write
       contents: write
